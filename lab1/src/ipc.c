@@ -6,13 +6,14 @@ int send(void* self, local_id dst, const Message* msg) {
 	Process* this = (Process*) self;
 	local_id src = this->id;
 	size_t msg_len = sizeof(MessageHeader) + msg->s_header.s_payload_len;
-	if (write(this->pipes[src][dst]->fw, msg, msg_len) == msg_len) {
+	write(this->pipes[src][dst]->fw, msg, msg_len);
+	// if (write(this->pipes[src][dst]->fw, msg, msg_len) == msg_len) {
 		printf("Send message successfull from %d pipe to %d\n", src, dst);
 		return 0;
-	} else {
-		printf("Can't send message from %d pipe to %d: return %ld\n", src, dst, msg_len);
-		return -1;
-	}	
+	//} else {
+	// 	printf("Can't send message from %d pipe to %d: return %ld\n", src, dst, msg_len);
+	// 	return -1;
+	// }	
 }
 
 int send_multicast(void* self, const Message* msg) {
@@ -25,6 +26,7 @@ int send_multicast(void* self, const Message* msg) {
 			}
 		}
 	}
+	return 0;
 }
 
 int receive(void* self, local_id from, Message* msg) {
@@ -73,7 +75,7 @@ int receive_any(void* self, Message* msg) {
 		if (!is_chose_pipe) {
 			for (int i = 0; i < this->num_of_processes; i++) {
 				if (i != this->id) {
-					read_count = read(this->pipes[this->id][i], &msg->s_header, sizeof(MessageHeader));
+					read_count = read(this->pipes[this->id][i]->fr, &msg->s_header, sizeof(MessageHeader));
 					if (read_count == bytes_to_read) {
 						is_chose_pipe = 1;
 						from = i;
@@ -91,7 +93,7 @@ int receive_any(void* self, Message* msg) {
 			}
 		}
 		if (is_chose_pipe && !is_read_header) {
-			read_count = read(this->pipes[this->id][from], &msg->s_header + sizeof(MessageHeader) - bytes_to_read, bytes_to_read);
+			read_count = read(this->pipes[this->id][from]->fr, &msg->s_header + sizeof(MessageHeader) - bytes_to_read, bytes_to_read);
 			if (read_count == bytes_to_read) {
                                 is_read_header = 1;
                                 bytes_to_read = msg->s_header.s_payload_len;
@@ -103,7 +105,7 @@ int receive_any(void* self, Message* msg) {
                         }
 		}
 		if (is_chose_pipe && is_read_header) {
-			read_count = read(this->pipes[this->id][from], msg->s_payload + msg->s_header.s_payload_len - bytes_to_read, bytes_to_read);
+			read_count = read(this->pipes[this->id][from]->fr, msg->s_payload + msg->s_header.s_payload_len - bytes_to_read, bytes_to_read);
                         if (read_count == bytes_to_read) {
                                 msg->s_payload[msg->s_header.s_payload_len] = 0;
                                 printf("Receive message from %d pipe to %d successfull\n", from, this->id);

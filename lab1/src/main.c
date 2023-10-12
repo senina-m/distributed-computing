@@ -26,6 +26,7 @@ int wait_for_all(Process* this, MessageType t){
         if(id == this->id) id++;
         else{
             if(receive(this, id, &msg) == 0){
+                printf("Process %i received message \'%s\'\n", this->id, msg.s_payload);
                 if(msg.s_header.s_type == t) id++;
             }else{
                 printf("Can't receive STARTED messages from process %i in process %i\n", id, this->id);
@@ -42,13 +43,13 @@ int run_child_rutine(Process* this){
     //print that child's process was started
     fprintf(this->log->processes, log_started_fmt, this->id, this->pid, this->parent_pid);
 
-    char buf[BUF_SIZE];
     Message msg;
     msg.s_header.s_type = STARTED;
     msg.s_header.s_magic = MESSAGE_MAGIC;
     msg.s_header.s_local_time = time(NULL);
-    int msg_len = sprintf(buf, log_started_fmt, this->id, this->pid, this->parent_pid);
+    int msg_len = sprintf(msg.s_payload, log_started_fmt, this->id, this->pid, this->parent_pid);
 
+    printf("Process %i  is going to send message \'%s\'\n", this->id, msg.s_payload);
     if (send_multicast(this, &msg) != 0){
         printf("Fail to do multicast STARTED request from process %i\n", this->id);
         return 1;
@@ -66,7 +67,7 @@ int run_child_rutine(Process* this){
     msg.s_header.s_type = DONE;
     msg.s_header.s_magic = MESSAGE_MAGIC;
     msg.s_header.s_local_time = time(NULL);
-    msg_len = sprintf(buf, log_done_fmt, this->id);
+    msg_len = sprintf(msg.s_payload, log_done_fmt, this->id);
 
     if (send_multicast(this, &msg) != 0){
         printf("Fail to do multicast DONE request from process %i\n", this->id);
@@ -76,7 +77,7 @@ int run_child_rutine(Process* this){
     if(wait_for_all(this, DONE) != 0){
         printf("Fail to receive all DONE messages %i\n", this->id);
         return 1;
-    }else fprintf(this->log->processes, log_received_all_started_fmt, this->id);
+    }else fprintf(this->log->processes, log_received_all_done_fmt, this->id);
 
     // if(close_used_pipes(this) !=0){
     //     printf("Fail to close used_pipes %i\n", this->id);
@@ -90,7 +91,7 @@ int run_child_rutine(Process* this){
 }
 
 int run_parent_rutine(Process* this){
-    // fprintf(this->log->processes, log_started_fmt, this->id, this->pid, this->parent_pid);
+    fprintf(this->log->processes, log_started_fmt, this->id, this->pid, this->parent_pid);
     //послушать все
 
     if(wait_for_all(this, STARTED) != 0){
@@ -101,7 +102,7 @@ int run_parent_rutine(Process* this){
     if(wait_for_all(this, DONE) != 0){
         printf("Fail to receive all DONE messages %i\n", this->id);
         return 1;
-    }else  fprintf(this->log->processes, log_received_all_started_fmt, this->id);
+    }else  fprintf(this->log->processes, log_received_all_done_fmt, this->id);
 
     for (int i = 0; i < this->num_of_processes; i++) {
         if (wait(NULL) == -1) {
@@ -147,8 +148,6 @@ int main (int argc, const char * argv[]){
     this->pipes = alloc_pipes(total_N);
 
     if(init_pipes(this)) return -1;
-    printf("Here2\n");
-
 
     pid_t my_parent_pid = this->pid;
     for(int i = 1; i < this->num_of_processes; i++){
@@ -157,13 +156,11 @@ int main (int argc, const char * argv[]){
             this->parent_pid = my_parent_pid;
             this->pid = getpid();
             this->id = i;
-            // printf(log_started_fmt, this->id, this->pid, this->parent_pid);
             break;
         }
     }
 
     if(close_unused_pipes(this)) return -1;
-    printf("Here4\n");
 
     if(this->parent_id == 0){
         run_child_rutine(this);
