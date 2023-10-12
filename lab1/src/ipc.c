@@ -7,10 +7,10 @@ int send(void* self, local_id dst, const Message* msg) {
 	local_id src = this->id;
 	size_t msg_len = sizeof(MessageHeader) + msg->s_header.s_payload_len;
 	if (write(this->pipes[src][dst]->fw, msg, msg_len) == msg_len) {
-		printf("Send message successfull from %d pipe to %d", src, dst);
+		printf("Send message successfull from %d pipe to %d\n", src, dst);
 		return 0;
 	} else {
-		printf("Can't send message from %d pipe to %d: return %ld", src, dst, msg_len);
+		printf("Can't send message from %d pipe to %d: return %ld\n", src, dst, msg_len);
 		return -1;
 	}	
 }
@@ -21,7 +21,7 @@ int send_multicast(void* self, const Message* msg) {
 	for (int i = 0; i < this->num_of_processes; i++) {
 		if (i != src) {
 			if (send(this, i, msg)) {
-					printf("Can't send multicast message from %d", src);
+					printf("Can't send multicast message from %d\n", src);
 			}
 		}
 	}
@@ -42,7 +42,7 @@ int receive(void* self, local_id from, Message* msg) {
 			} else if (read_count > 0) {
 				bytes_to_read -= read_count;
 			} else if (errno != EAGAIN) {
-				printf("Can't read from %d pipe to %d", from, this->id);
+				printf("Can't read from %d pipe to %d\n", from, this->id);
 				return -1;
 			}
 		}
@@ -50,15 +50,70 @@ int receive(void* self, local_id from, Message* msg) {
 			read_count = read(listened_pipe, msg->s_payload + msg->s_header.s_payload_len - bytes_to_read, bytes_to_read);
 			if (read_count == bytes_to_read) {
 				msg->s_payload[msg->s_header.s_payload_len] = 0;
-				printf("Receive message from %d pipe to %d successfull", from, this->id);
+				printf("Receive message from %d pipe to %d successfull\n", from, this->id);
 				return 0;
 			} else if (read_count > 0) {
 				bytes_to_read -= read_count;
 			} else if (errno != EAGAIN) {
-				printf("Can't read from %d pipe to %d", from, this-> id);
+				printf("Can't read from %d pipe to %d\n", from, this-> id);
 				return -1;
 			}
 		}
 	}
 }
 
+int receive_any(void* self, Message* msg) {
+	Process* this = (Process*) self;
+	uint8_t is_chose_pipe = 0;
+	uint8_t is_read_header = 0;
+	local_id from = -1;
+	size_t bytes_to_read = sizeof(MessageHeader);
+	while(1) {
+		ssize_t read_count = 0;
+		if (!is_chose_pipe) {
+			for (int i = 0; i < this->num_of_processes; i++) {
+				if (i != this->id) {
+					read_count = read(this->pipes[this->id][i], &msg->s_header, sizeof(MessageHeader));
+					if (read_count == bytes_to_read) {
+						is_chose_pipe = 1;
+						from = i;
+						is_read_header = 1;
+						bytes_to_read = msg->s_header.s_payload_len;
+					} else if (read_count > 0) {
+						is_chose_pipe = 1;
+						from = i;
+						bytes_to_read -= read_count;
+					} else if (errno != EAGAIN) {
+						printf("Can't read any to %d pipe\n", this->id);
+						return -1;
+					}
+				}
+			}
+		}
+		if (is_chose_pipe && !is_read_header) {
+			read_count = read(this->pipes[this->id][from], &msg->s_header + sizeof(MessageHeader) - bytes_to_read, bytes_to_read);
+			if (read_count == bytes_to_read) {
+                                is_read_header = 1;
+                                bytes_to_read = msg->s_header.s_payload_len;
+                        } else if (read_count > 0) {
+                                bytes_to_read -= read_count;
+                        } else if (errno != EAGAIN) {
+                                printf("Can't read from %d pipe to %d\n", from, this->id);
+                                return -1;
+                        }
+		}
+		if (is_chose_pipe && is_read_header) {
+			read_count = read(this->pipes[this->id][from], msg->s_payload + msg->s_header.s_payload_len - bytes_to_read, bytes_to_read);
+                        if (read_count == bytes_to_read) {
+                                msg->s_payload[msg->s_header.s_payload_len] = 0;
+                                printf("Receive message from %d pipe to %d successfull\n", from, this->id);
+                                return 0;
+                        } else if (read_count > 0) {
+                                bytes_to_read -= read_count;
+                        } else if (errno != EAGAIN) {
+                                printf("Can't read from %d pipe to %d\n", from, this-> id);
+                                return -1;
+                        }
+		}
+	}
+}
