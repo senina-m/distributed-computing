@@ -12,7 +12,7 @@ typedef struct{
 typedef struct{
     local_id id;
     local_id parent_id;
-    pid_t this_pid;
+    pid_t pid;
     pid_t parent_pid;
     int num_of_processes; 
     Pipe** pipes;

@@ -42,12 +42,26 @@ int main (int argc, const char * argv[]){
     this->id = 0;
     this->parent_id = -1;
     this->parent_pid = -1;
-    this->this_pid = getpid();
+    this->pid = getpid();
     this->num_of_processes = total_N;
     this->log = mmalloc(Log);
     this->log->processes = fopen(events_log, "a");
     this->log->pipes = fopen(pipes_log, "w");
     this->pipes = mmalloc(Pipe);
+
+    init_pipes(this);
+    fclose(this->log->pipes);
+
+    pid_t parent_pid = this->parent_pid;
+    for(int i = 1; i < this->num_of_processes; i++){
+        if (fork() == 0){
+            this->parent_id = 0;
+            this->parent_pid = parent_pid;
+            this->pid = getpid();
+            this->id = i;
+        }
+    }
+
 
     run_system();
 }
