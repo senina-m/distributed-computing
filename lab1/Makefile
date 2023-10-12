@@ -4,7 +4,7 @@ SRCDIR=src
 CC=gcc
 
 main: build
-	$(CC) $(SRCDIR)/main.c $(SRCDIR)/pipes.c -o $(BUILDDIR)/runnable
+	$(CC) $(SRCDIR)/main.c $(SRCDIR)/pipes.c $(SRCDIR)/ipc.c -o $(BUILDDIR)/runnable
 
 build:
 	mkdir -p $(BUILDDIR)
