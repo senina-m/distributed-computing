@@ -1,4 +1,9 @@
 
+#ifndef __IFMO_DISTRIBUTED_CLASS_PROCESSES__H
+#define __IFMO_DISTRIBUTED_CLASS_PROCESSES__H
+#include "ipc.h"
+#include <stdio.h> 
+
 typedef struct{
     int fw;
     int fr;
@@ -18,3 +23,5 @@ typedef struct{
     Pipe** pipes;
     Log* log;
 } Process;
+
+#endif // __IFMO_DISTRIBUTED_CLASS_PROCESSES__H

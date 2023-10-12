@@ -14,9 +14,12 @@ void free_process(Process* ptr){
     free(ptr);
 }
 
+int run_child_rutine(this){
 
-void init_system(Process* this){
+}
 
+int run_parent_rutine(this){
+    
 }
 
 int main (int argc, const char * argv[]){
@@ -49,8 +52,11 @@ int main (int argc, const char * argv[]){
     this->log->pipes = fopen(pipes_log, "w");
     this->pipes = mmalloc(Pipe);
 
-    init_pipes(this);
-    fclose(this->log->pipes);
+    //print that parent process is running
+    //do we need this print???
+    fprintf(this->log->processes, log_started_fmt, this->id, this->pid, this->parent_pid);
+
+    if(!init_pipes(this)) return -1;
 
     pid_t parent_pid = this->parent_pid;
     for(int i = 1; i < this->num_of_processes; i++){
@@ -59,9 +65,17 @@ int main (int argc, const char * argv[]){
             this->parent_pid = parent_pid;
             this->pid = getpid();
             this->id = i;
+            //print that child's process was started
+            fprintf(this->log->processes, log_started_fmt, this->id, this->pid, this->parent_pid);
         }
     }
 
+    if(!close_unused_pipes(this)) return -1;
 
-    run_system();
+    if(this->parent_id == 0){
+        run_child_rutine(this);
+    }else run_parent_rutine(this);
+
+    fclose(this->log->pipes);
+    fclose(this->log->processes);
 }
