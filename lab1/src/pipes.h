@@ -18,4 +18,6 @@ void free_pipes(Pipe*** ptr, int n);
 
 int close_unused_pipes(Process* this);
 
+int close_used_pipes(Process* this);
+
 #endif // __IFMO_DISTRIBUTED_CLASS_PIPES__H

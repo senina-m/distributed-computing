@@ -3,6 +3,7 @@
 #define __IFMO_DISTRIBUTED_CLASS_PROCESSES__H
 #include "ipc.h"
 #include <stdio.h> 
+#include <sys/types.h>
 
 typedef struct{
     int fw;

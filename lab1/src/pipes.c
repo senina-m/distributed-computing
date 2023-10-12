@@ -50,3 +50,19 @@ int close_unused_pipes(Process* this){
     } 
     return 0;
 }
+
+int close_used_pipes(Process* this){
+    for (int i = 0; i < this->num_of_processes; i++) {
+        for (int j = 0; j < this->num_of_processes; j++) {
+            if ( i = this->id) {
+                if((close(this->pipes[i][j]->fr) == 0) && (close(this->pipes[i][j]->fw) == 0)){
+                    fprintf(this->log->pipes, "Process %i closed pipes %i %i and %i %i\n", this->id, i, j, j, i);
+                }else{
+                    fprintf(this->log->pipes, "Process %i CAN'T close pipes %i %i and %i %i\n", this->id, i, j, j, i);
+                    return 1;
+                }
+            }
+        }
+    } 
+    return 0;
+}
