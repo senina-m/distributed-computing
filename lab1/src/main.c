@@ -9,7 +9,7 @@
 #include "pipes.h"
 
 void free_process(Process* ptr){
-    free_pipes(ptr->pipes, ptr->num_of_processes - 1);
+    free_pipes(ptr->pipes, ptr->num_of_processes);
     free(ptr->log);
     free(ptr);
 }
@@ -56,7 +56,7 @@ int main (int argc, const char * argv[]){
     //do we need this print???
     fprintf(this->log->processes, log_started_fmt, this->id, this->pid, this->parent_pid);
 
-    if(!init_pipes(this)) return -1;
+    if(init_pipes(this)) return -1;
 
     pid_t parent_pid = this->parent_pid;
     for(int i = 1; i < this->num_of_processes; i++){
@@ -70,7 +70,7 @@ int main (int argc, const char * argv[]){
         }
     }
 
-    if(!close_unused_pipes(this)) return -1;
+    if(close_unused_pipes(this)) return -1;
 
     if(this->parent_id == 0){
         run_child_rutine(this);

@@ -28,11 +28,11 @@ int init_pipes(Process* this){
                 fprintf(this->log->pipes, "Process %i pipe %i -> %i\n", this->id, i, j);
             }else{
                 printf("Can't create pipes!\n");
-                return 0;
+                return 1;
             }
         }
     }
-    return 1;
+    return 0;
 }
 
 int close_unused_pipes(Process* this){
@@ -43,10 +43,10 @@ int close_unused_pipes(Process* this){
                     fprintf(this->log->pipes, "Process %i closed pipes %i %i and %i %i\n", this->id, i, j, j, i);
                 }else{
                     fprintf(this->log->pipes, "Process %i CAN'T close pipes %i %i and %i %i\n", this->id, i, j, j, i);
-                    return 0;
+                    return 1;
                 }
             }
         }
     } 
-    return 1;
+    return 0;
 }
