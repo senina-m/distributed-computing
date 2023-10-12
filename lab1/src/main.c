@@ -14,11 +14,11 @@ void free_process(Process* ptr){
     free(ptr);
 }
 
-int run_child_rutine(this){
+int run_child_rutine(Process* this){
 
 }
 
-int run_parent_rutine(this){
+int run_parent_rutine(Process* this){
     
 }
 
@@ -50,7 +50,7 @@ int main (int argc, const char * argv[]){
     this->log = mmalloc(Log);
     this->log->processes = fopen(events_log, "a");
     this->log->pipes = fopen(pipes_log, "w");
-    this->pipes = mmalloc(Pipe);
+    this->pipes = alloc_pipes(total_N);
 
     //print that parent process is running
     //do we need this print???

@@ -20,7 +20,7 @@ typedef struct{
     pid_t pid;
     pid_t parent_pid;
     int num_of_processes; 
-    Pipe** pipes;
+    Pipe*** pipes;
     Log* log;
 } Process;
 

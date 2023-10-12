@@ -10,11 +10,11 @@
 #include <unistd.h>
 #include "processes.h"
 
-Pipe** alloc_pipes(int n);
+Pipe*** alloc_pipes(int n);
 
 int init_pipes(Process* this);
 
-void free_pipes(Pipe** ptr, int n);
+void free_pipes(Pipe*** ptr, int n);
 
 int close_unused_pipes(Process* this);
 
