@@ -55,11 +55,9 @@ int run_child_rutine(Process* this){
     }
 
     if(wait_for_all(this, STARTED) != 0){
-        printf("Fail to receive all STARTED messages %i\n", this->id);
+        printf("Fail to receive all STARTED messages in child %i\n", this->id);
         return 1;
-    }else{
-        fprintf(this->log->processes, log_received_all_started_fmt, this->id);
-    }
+    }else fprintf(this->log->processes, log_received_all_started_fmt, this->id);
 
     //here we do our work
     fprintf(this->log->processes, log_done_fmt, this->id);
@@ -78,9 +76,7 @@ int run_child_rutine(Process* this){
     if(wait_for_all(this, DONE) != 0){
         printf("Fail to receive all DONE messages %i\n", this->id);
         return 1;
-    }else{
-        fprintf(this->log->processes, log_received_all_started_fmt, this->id);
-    }
+    }else fprintf(this->log->processes, log_received_all_started_fmt, this->id);
 
     // if(close_used_pipes(this) !=0){
     //     printf("Fail to close used_pipes %i\n", this->id);
@@ -94,22 +90,18 @@ int run_child_rutine(Process* this){
 }
 
 int run_parent_rutine(Process* this){
-    fprintf(this->log->processes, log_started_fmt, this->id, this->pid, this->parent_pid);
+    // fprintf(this->log->processes, log_started_fmt, this->id, this->pid, this->parent_pid);
     //послушать все
 
     if(wait_for_all(this, STARTED) != 0){
-        printf("Fail to receive all STARTED messages %i\n", this->id);
+        printf("Fail to receive all STARTED messages in parent %i\n", this->id);
         return 1;
-    }else{
-        fprintf(this->log->processes, log_received_all_started_fmt, this->id);
-    }
+    }else fprintf(this->log->processes, log_received_all_started_fmt, this->id);
 
     if(wait_for_all(this, DONE) != 0){
         printf("Fail to receive all DONE messages %i\n", this->id);
         return 1;
-    }else{
-        fprintf(this->log->processes, log_received_all_started_fmt, this->id);
-    }
+    }else  fprintf(this->log->processes, log_received_all_started_fmt, this->id);
 
     for (int i = 0; i < this->num_of_processes; i++) {
         if (wait(NULL) == -1) {
@@ -131,8 +123,8 @@ int main (int argc, const char * argv[]){
     }
 
     local_id num_of_processes;
-    if (strcmp(argv[1], "-p")){
-        num_of_processes = atoi(argv[3]);
+    if (strcmp(argv[1], "-p") == 0){
+        num_of_processes = atoi(argv[2]);
         printf("num_of_processes = %i\n", num_of_processes);
         if(num_of_processes > 10 || num_of_processes < 1){
             printf("Num of processes has to be from 1 to 10\n");
@@ -154,25 +146,26 @@ int main (int argc, const char * argv[]){
     this->log->pipes = fopen(pipes_log, "w");
     this->pipes = alloc_pipes(total_N);
 
-    //print that parent process is running
-    //do we need this print???
-    fprintf(this->log->processes, log_started_fmt, this->id, this->pid, this->parent_pid);
-
     if(init_pipes(this)) return -1;
+    printf("Here2\n");
 
-    pid_t parent_pid = this->parent_pid;
+
+    pid_t my_parent_pid = this->pid;
     for(int i = 1; i < this->num_of_processes; i++){
         if (fork() == 0){
             this->parent_id = 0;
-            this->parent_pid = parent_pid;
+            this->parent_pid = my_parent_pid;
             this->pid = getpid();
             this->id = i;
+            // printf(log_started_fmt, this->id, this->pid, this->parent_pid);
+            break;
         }
     }
 
     if(close_unused_pipes(this)) return -1;
+    printf("Here4\n");
 
     if(this->parent_id == 0){
-        if(run_parent_rutine(this)) return -1;
-    }else run_child_rutine(this);
+        run_child_rutine(this);
+    }else  if(run_parent_rutine(this)) return -1;
 }
