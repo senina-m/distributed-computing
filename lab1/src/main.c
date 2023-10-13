@@ -48,6 +48,7 @@ int run_child_rutine(Process* this){
     msg.s_header.s_magic = MESSAGE_MAGIC;
     msg.s_header.s_local_time = time(NULL);
     int msg_len = sprintf(msg.s_payload, log_started_fmt, this->id, this->pid, this->parent_pid);
+    msg.s_header.s_payload_len = msg_len;
 
     printf("Process %i  is going to send message \'%s\'\n", this->id, msg.s_payload);
     if (send_multicast(this, &msg) != 0){
@@ -68,6 +69,7 @@ int run_child_rutine(Process* this){
     msg.s_header.s_magic = MESSAGE_MAGIC;
     msg.s_header.s_local_time = time(NULL);
     msg_len = sprintf(msg.s_payload, log_done_fmt, this->id);
+    msg.s_header.s_payload_len = msg_len;
 
     if (send_multicast(this, &msg) != 0){
         printf("Fail to do multicast DONE request from process %i\n", this->id);
@@ -86,6 +88,7 @@ int run_child_rutine(Process* this){
 
     fclose(this->log->pipes);
     fclose(this->log->processes);
+    printf("end of process %d\n", this->id);
     free_process(this);
     exit(EXIT_SUCCESS);
 }
@@ -99,14 +102,17 @@ int run_parent_rutine(Process* this){
         return 1;
     }else fprintf(this->log->processes, log_received_all_started_fmt, this->id);
 
+    printf("parent receive all started message\n");
+
     if(wait_for_all(this, DONE) != 0){
         printf("Fail to receive all DONE messages %i\n", this->id);
         return 1;
     }else  fprintf(this->log->processes, log_received_all_done_fmt, this->id);
 
+    printf("parent receive all done message\n");
     for (int i = 0; i < this->num_of_processes; i++) {
         if (wait(NULL) == -1) {
-            printf("Fail to receive all DONE messages %i\n", this->id);
+            printf("Fail to close child %i\n", this->id);
             return 1;
         }
     }

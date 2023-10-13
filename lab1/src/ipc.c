@@ -6,14 +6,13 @@ int send(void* self, local_id dst, const Message* msg) {
 	Process* this = (Process*) self;
 	local_id src = this->id;
 	size_t msg_len = sizeof(MessageHeader) + msg->s_header.s_payload_len;
-	write(this->pipes[src][dst]->fw, msg, msg_len);
-	// if (write(this->pipes[src][dst]->fw, msg, msg_len) == msg_len) {
-		printf("Send message successfull from %d pipe to %d\n", src, dst);
+	if (write(this->pipes[src][dst]->fw, msg, msg_len) == msg_len) {
+		printf("Send message successfull from %d pipe to %d: %s\n", src, dst, msg->s_payload);
 		return 0;
-	//} else {
-	// 	printf("Can't send message from %d pipe to %d: return %ld\n", src, dst, msg_len);
-	// 	return -1;
-	// }	
+	} else {
+	 	printf("Can't send message from %d pipe to %d: return %ld\n", src, dst, msg_len);
+	 	return -1;
+	}	
 }
 
 int send_multicast(void* self, const Message* msg) {
@@ -41,10 +40,12 @@ int receive(void* self, local_id from, Message* msg) {
 			if (read_count == bytes_to_read) {
 				is_read_header = 1;
 				bytes_to_read = msg->s_header.s_payload_len;
+				printf("Read header from %d pipe to %d successfull: type %d, size_payload %d\n", from, this->id, msg->s_header.s_type, msg->s_header.s_payload_len);
 			} else if (read_count > 0) {
 				bytes_to_read -= read_count;
 			} else if (errno != EAGAIN) {
 				printf("Can't read from %d pipe to %d\n", from, this->id);
+				perror("Can't receive header");
 				return -1;
 			}
 		}
@@ -52,12 +53,13 @@ int receive(void* self, local_id from, Message* msg) {
 			read_count = read(listened_pipe, msg->s_payload + msg->s_header.s_payload_len - bytes_to_read, bytes_to_read);
 			if (read_count == bytes_to_read) {
 				msg->s_payload[msg->s_header.s_payload_len] = 0;
-				printf("Receive message from %d pipe to %d successfull\n", from, this->id);
+				printf("Receive message from %d pipe to %d successfull: %s\n", from, this->id, msg->s_payload);
 				return 0;
 			} else if (read_count > 0) {
 				bytes_to_read -= read_count;
 			} else if (errno != EAGAIN) {
 				printf("Can't read from %d pipe to %d\n", from, this-> id);
+				perror("Can't receive payload");
 				return -1;
 			}
 		}
