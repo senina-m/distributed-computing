@@ -31,7 +31,7 @@ int wait_for_all(Process* this, MessageType t){
         if(id == this->id) id++;
         else{
             if(receive(this, id, &msg) == 0){
-                printf("Process %i received message \'%s\'\n", this->id, msg.s_payload);
+                // printf("Process %i received message \'%s\'\n", this->id, msg.s_payload);
                 if(msg.s_header.s_type == t) id++;
             }else{
                 printf("Can't receive STARTED messages from process %i in process %i\n", id, this->id);
@@ -55,7 +55,7 @@ int run_child_rutine(Process* this){
     int msg_len = sprintf(msg.s_payload, log_started_fmt, this->id, this->pid, this->parent_pid);
     msg.s_header.s_payload_len = msg_len;
 
-    printf("Process %i  is going to send message \'%s\'\n", this->id, msg.s_payload);
+    // printf("Process %i  is going to send message \'%s\'\n", this->id, msg.s_payload);
     if (send_multicast(this, &msg) != 0){
         printf("Fail to do multicast STARTED request from process %i\n", this->id);
         return 1;
@@ -87,19 +87,19 @@ int run_child_rutine(Process* this){
     }else logger(this->log->processes, log_received_all_done_fmt, this->id);
 
     // if(close_used_pipes(this) !=0){
-    //     printf("Fail to close used_pipes %i\n", this->id);
+    //     printf("Fail to close used pipes %i\n", this->id);
     //     return 1;
     // }
 
     fclose(this->log->pipes);
     fclose(this->log->processes);
-    printf("end of process %d\n", this->id);
+    // printf("end of process %d\n", this->id);
     free_process(this);
     exit(EXIT_SUCCESS);
 }
 
 int run_parent_rutine(Process* this){
-    logger(this->log->processes, log_started_fmt, this->id, this->pid, this->parent_pid);
+    // logger(this->log->processes, log_started_fmt , this->id, this->pid, this->parent_pid);
     //послушать все
 
     if(wait_for_all(this, STARTED) != 0){
@@ -107,20 +107,25 @@ int run_parent_rutine(Process* this){
         return 1;
     }else logger(this->log->processes, log_received_all_started_fmt, this->id);
 
-    printf("parent receive all started message\n");
+    // printf("parent receive all started message\n");
 
     if(wait_for_all(this, DONE) != 0){
         printf("Fail to receive all DONE messages %i\n", this->id);
         return 1;
     }else logger(this->log->processes, log_received_all_done_fmt, this->id);
 
-    printf("parent receive all done message\n");
-    for (int i = 0; i < this->num_of_processes; i++) {
+    // printf("parent receive all done message\n");
+    for (int i = 1; i < this->num_of_processes; i++) {
         if (wait(NULL) == -1) {
-            printf("Fail to close child %i\n", this->id);
+            printf("Fail to close %i children\n", this->num_of_processes - i);
             return 1;
         }
     }
+
+    // if(close_used_pipes(this) !=0){
+    //     printf("Fail to close used pipes %i\n", this->id);
+    //     return 1;
+    // }
 
     fclose(this->log->pipes);
     fclose(this->log->processes);
@@ -137,7 +142,7 @@ int main (int argc, const char * argv[]){
     local_id num_of_processes;
     if (strcmp(argv[1], "-p") == 0){
         num_of_processes = atoi(argv[2]);
-        printf("num_of_processes = %i\n", num_of_processes);
+        // printf("num_of_processes = %i\n", num_of_processes);
         if(num_of_processes > 10 || num_of_processes < 1){
             printf("Num of processes has to be from 1 to 10\n");
             return -1;
