@@ -6,8 +6,8 @@ int send(void* self, local_id dst, const Message* msg) {
 	Process* this = (Process*) self;
 	local_id src = this->id;
 	size_t msg_len = sizeof(MessageHeader) + msg->s_header.s_payload_len;
-	ssize_t ret = 0;
-	if (ret = write(this->pipes[dst][src]->fw, msg, msg_len) == msg_len) {
+	ssize_t ret = write(this->pipes[dst][src]->fw, msg, msg_len);
+	if (ret == msg_len) {
 		// printf("Send message successfull from %d pipe to %d: %s\n", src, dst, msg->s_payload);
 		return 0;
 	} else {

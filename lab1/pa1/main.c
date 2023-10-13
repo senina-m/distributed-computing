@@ -38,8 +38,8 @@ int wait_for_all(Process* this, MessageType t){
                 return 1;
             }
         }
-        return 0;
     }
+    return 0;
 }
 
 int run_child_rutine(Process* this){
@@ -86,10 +86,10 @@ int run_child_rutine(Process* this){
         return 1;
     }else logger(this->log->processes, log_received_all_done_fmt, this->id);
 
-    // if(close_used_pipes(this) !=0){
-    //     printf("Fail to close used pipes %i\n", this->id);
-    //     return 1;
-    // }
+    if(close_used_pipes(this) !=0){
+        printf("Fail to close used pipes %i\n", this->id);
+        return 1;
+    }
 
     fclose(this->log->pipes);
     fclose(this->log->processes);
@@ -122,10 +122,10 @@ int run_parent_rutine(Process* this){
         }
     }
 
-    // if(close_used_pipes(this) !=0){
-    //     printf("Fail to close used pipes %i\n", this->id);
-    //     return 1;
-    // }
+    if(close_used_pipes(this) !=0){
+        printf("Fail to close used pipes %i\n", this->id);
+        return 1;
+    }
 
     fclose(this->log->pipes);
     fclose(this->log->processes);
@@ -139,17 +139,15 @@ int main (int argc, const char * argv[]){
         return -1;
     }
 
-    local_id num_of_processes;
+    local_id total_N = 0;
     if (strcmp(argv[1], "-p") == 0){
-        num_of_processes = atoi(argv[2]);
+        total_N = atoi(argv[2]) + 1;
         // printf("num_of_processes = %i\n", num_of_processes);
-        if(num_of_processes > 10 || num_of_processes < 1){
+        if(total_N > 10 || total_N < 1){
             printf("Num of processes has to be from 1 to 10\n");
             return -1;
         }
     }
-
-    local_id total_N = num_of_processes + 1;
 
     // setup parent process
     Process* this = mmalloc(Process);

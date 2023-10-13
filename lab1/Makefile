@@ -1,6 +1,6 @@
 CFLAGS=--std=c17 -Wall -pedantic -Isrc/ -ggdb -Wextra -Werror -DDEBUG
 BUILDDIR=build
-SRCDIR=src
+SRCDIR=pa1
 CC=gcc
 
 main: build
