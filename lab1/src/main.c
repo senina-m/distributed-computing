@@ -12,6 +12,11 @@
 
 #define BUF_SIZE 1024
 
+#define logger(file, str, ...) {\
+	fprintf(file, str, __VA_ARGS__);\
+	printf(str, __VA_ARGS__);\
+}
+
 void free_process(Process* ptr){
     free_pipes(ptr->pipes, ptr->num_of_processes);
     free(ptr->log);
@@ -41,7 +46,7 @@ int run_child_rutine(Process* this){
 
     //START section starts here
     //print that child's process was started
-    fprintf(this->log->processes, log_started_fmt, this->id, this->pid, this->parent_pid);
+    logger(this->log->processes, log_started_fmt, this->id, this->pid, this->parent_pid);
 
     Message msg;
     msg.s_header.s_type = STARTED;
@@ -59,10 +64,10 @@ int run_child_rutine(Process* this){
     if(wait_for_all(this, STARTED) != 0){
         printf("Fail to receive all STARTED messages in child %i\n", this->id);
         return 1;
-    }else fprintf(this->log->processes, log_received_all_started_fmt, this->id);
+    }else logger(this->log->processes, log_received_all_started_fmt, this->id);
 
     //here we do our work
-    fprintf(this->log->processes, log_done_fmt, this->id);
+    logger(this->log->processes, log_done_fmt, this->id);
     // log that we've done all our work
 
     msg.s_header.s_type = DONE;
@@ -79,7 +84,7 @@ int run_child_rutine(Process* this){
     if(wait_for_all(this, DONE) != 0){
         printf("Fail to receive all DONE messages %i\n", this->id);
         return 1;
-    }else fprintf(this->log->processes, log_received_all_done_fmt, this->id);
+    }else logger(this->log->processes, log_received_all_done_fmt, this->id);
 
     // if(close_used_pipes(this) !=0){
     //     printf("Fail to close used_pipes %i\n", this->id);
@@ -94,20 +99,20 @@ int run_child_rutine(Process* this){
 }
 
 int run_parent_rutine(Process* this){
-    fprintf(this->log->processes, log_started_fmt, this->id, this->pid, this->parent_pid);
+    logger(this->log->processes, log_started_fmt, this->id, this->pid, this->parent_pid);
     //послушать все
 
     if(wait_for_all(this, STARTED) != 0){
         printf("Fail to receive all STARTED messages in parent %i\n", this->id);
         return 1;
-    }else fprintf(this->log->processes, log_received_all_started_fmt, this->id);
+    }else logger(this->log->processes, log_received_all_started_fmt, this->id);
 
     printf("parent receive all started message\n");
 
     if(wait_for_all(this, DONE) != 0){
         printf("Fail to receive all DONE messages %i\n", this->id);
         return 1;
-    }else  fprintf(this->log->processes, log_received_all_done_fmt, this->id);
+    }else logger(this->log->processes, log_received_all_done_fmt, this->id);
 
     printf("parent receive all done message\n");
     for (int i = 0; i < this->num_of_processes; i++) {
