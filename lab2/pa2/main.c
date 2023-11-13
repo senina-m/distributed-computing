@@ -18,43 +18,69 @@
     printf(str, __VA_ARGS__);                                                  \
   }
 
+int waiting_dst;
+
 void free_process(Process *ptr) {
   free_pipes(ptr->pipes, ptr->num_of_processes);
   free(ptr->log);
   free(ptr);
 }
 
-void create_message(Message* msg, MessageType type, Process* this){
+void create_message(Message *msg, MessageType type, void *contents, int len) {
   msg->s_header.s_type = type;
   msg->s_header.s_magic = MESSAGE_MAGIC;
   msg->s_header.s_local_time = get_physical_time();
-  int msg_len = sprintf(msg->s_payload, log_started_fmt, this->id, this->pid,
-                        this->parent_pid);
-  msg->s_header.s_payload_len = msg_len;
+  if (contents != NULL) {
+    msg->s_header.s_payload_len = len;
+    memcpy(msg->s_payload, contents, len);
+  }
 }
 
 int wait_for_all(Process *this, MessageType t) {
-  int n = this->num_of_processes;
   Message msg;
-  local_id id = 1; // because parent doesn't send anything
-  while (id < n) {
-    if (id == this->id)
-      id++;
-    else {
-      if (receive(this, id, &msg) == 0) {
-        // printf("Process %i received message \'%s\'\n", this->id,
-        // msg.s_payload);
-        if (msg.s_header.s_type == t)
-          id++;
-      } else {
-        printf("Can't receive STARTED messages from process %i in process %i\n",
-               id, this->id);
-        return 1;
-      }
+  int amount = 0;
+  // if it's parent proc we need to wait n-1, if it's client proc we need to
+  // wait n-2;
+  int n = this->num_of_processes - ((this->id == 0) ? 1 : 2);
+  while (amount < n) {
+    if (receive_any(this, &msg) == 0) {
+      if (msg.s_header.s_type == t)
+        amount++;
+    } else {
+      printf("Fail to recive message in process %i (wait_for_all)\n", this->id);
+      return 1;
     }
   }
   return 0;
 }
+
+int wait_for_history(Process *this, AllHistory *all_history) {
+  Message msg;
+  all_history->s_history_len = 0;
+  while (all_history->s_history_len < this->num_of_processes - 1) {
+    if (receive_any(this, &msg) == 0) {
+      if (msg.s_header.s_type == BALANCE_HISTORY) {
+        BalanceHistory history;
+        memcpy(&history, &(msg.s_payload), sizeof(msg.s_payload));
+        all_history->s_history[history.s_id - 1] = history;
+        all_history->s_history_len++;
+      }
+    } else {
+      printf("Can't receive BALANCE messages in parent \n");
+      return 1;
+    }
+  }
+  return 0;
+}
+// void wait_for_ack(Process* this){
+//   Message  msg;
+//   receive_any(this, &msg);
+//   if (msg.s_header.s_type == ACK) {
+//     logger(this->log->processes, log_transfer_out_fmt, this->id);
+//   } else {
+//     printf("ERROR resciving ASK from client %i", dst);
+//   }
+// }
 
 int run_child_rutine(Process *this) {
 
@@ -63,7 +89,7 @@ int run_child_rutine(Process *this) {
          this->parent_pid);
 
   Message msg;
-  create_message(&msg, STARTED, this);
+  create_message(&msg, STARTED, NULL, 0);
 
   if (send_multicast(this, &msg) != 0) {
     printf("Fail to do multicast STARTED request from process %i\n", this->id);
@@ -89,7 +115,7 @@ int run_child_rutine(Process *this) {
   //        }
   // log that we've done all our work
 
-    create_message(&msg, DONE, this);
+  create_message(&msg, DONE, NULL, 0);
 
   if (send_multicast(this, &msg) != 0) {
     printf("Fail to do multicast DONE request from process %i\n", this->id);
@@ -126,10 +152,11 @@ int run_parent_rutine(Process *this) {
 
   // ------------ send for all STOP message -------------
   Message msg;
-  create_message(&msg, STOP, this);
+  create_message(&msg, STOP, NULL, 0);
 
   if (send_multicast(this, &msg) != 0) {
-    printf("Fail to do multicast STOP request from process parent %i\n", this->id);
+    printf("Fail to do multicast STOP request from process parent %i\n",
+           this->id);
     return 1;
   }
   // ----------- wait for DONE messages from all -------
@@ -141,8 +168,7 @@ int run_parent_rutine(Process *this) {
   //------------ collect BALANCE_HISTORY ---------------
 
   AllHistory *all_history;
-
-  if (wait_for_history(this, BALANCE_HISTORY, all_history) != 0) {
+  if (wait_for_history(this, all_history) != 0) {
     printf("Fail to receive BALANCE_HISTORY from all clients %i\n", this->id);
     return 1;
   }
@@ -171,14 +197,27 @@ int run_parent_rutine(Process *this) {
 }
 
 void transfer(void *parent_data, local_id src, local_id dst, balance_t amount) {
-  // TODO: student, please implement me
+  Process *this = (Process *)parent_data;
+  // ----------- send transfer request ----------------
+  Message msg;
+  TransferOrder order;
+  order.s_src = src;
+  order.s_dst = dst;
+  order.s_amount = amount;
+  create_message(&msg, TRANSFER, &order, sizeof(TransferOrder));
 
-  // send transfer request
-  // wait fro ACK message from dist
+  send(this, dst, &msg);
+
+  // ----------- listen for ASK -----------------------
+  receive(this, dst, &msg);
+  if (msg.s_header.s_type == ACK) {
+  } else {
+    printf("ERROR resciving ASK from client %i", dst);
+  }
 }
 
 int main(int argc, const char *argv[]) {
-  if (argc != 3) {
+  if (argc < 3) {
     printf("Invalid amount of arguments = %i\n", argc);
     return -1;
   }
@@ -189,6 +228,16 @@ int main(int argc, const char *argv[]) {
     if (total_N > 10 || total_N < 1) {
       printf("Num of processes has to be from 1 to 10\n");
       return -1;
+    }
+  }
+
+  balance_t *balances = (balance_t *)malloc(sizeof(balance_t) * (total_N - 1));
+  if (argc < total_N + 2) { // command + -p + N + balance*(N-1)
+    printf("Too little amount of balances for clients!\n");
+    return -1;
+  } else {
+    for (int i = 0; i < total_N - 1; i++) {
+      balances[i] = atoi(argv[2 + i]);
     }
   }
 
@@ -203,6 +252,7 @@ int main(int argc, const char *argv[]) {
   this->log->processes = fopen(events_log, "a");
   this->log->pipes = fopen(pipes_log, "w");
   this->pipes = alloc_pipes(total_N);
+  this->balance = -1;
 
   if (init_pipes(this))
     return -1;
@@ -214,9 +264,11 @@ int main(int argc, const char *argv[]) {
       this->parent_pid = my_parent_pid;
       this->pid = getpid();
       this->id = i;
+      this->balance = balances[i - 1];
       break;
     }
   }
+  free(balances);
 
   if (close_unused_pipes(this))
     return -1;

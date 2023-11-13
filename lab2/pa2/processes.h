@@ -2,6 +2,7 @@
 #ifndef __IFMO_DISTRIBUTED_CLASS_PROCESSES__H
 #define __IFMO_DISTRIBUTED_CLASS_PROCESSES__H
 #include "ipc.h"
+#include "banking.h"
 #include <stdio.h> 
 #include <sys/types.h>
 #include <unistd.h>
@@ -25,6 +26,7 @@ typedef struct{
     int num_of_processes; 
     Pipe*** pipes;
     Log* log;
+    balance_t balance;
 } Process;
 
 #endif // __IFMO_DISTRIBUTED_CLASS_PROCESSES__H
