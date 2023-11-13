@@ -24,6 +24,15 @@ void free_process(Process *ptr) {
   free(ptr);
 }
 
+void create_message(Message* msg, MessageType type, Process* this){
+  msg->s_header.s_type = type;
+  msg->s_header.s_magic = MESSAGE_MAGIC;
+  msg->s_header.s_local_time = get_physical_time();
+  int msg_len = sprintf(msg->s_payload, log_started_fmt, this->id, this->pid,
+                        this->parent_pid);
+  msg->s_header.s_payload_len = msg_len;
+}
+
 int wait_for_all(Process *this, MessageType t) {
   int n = this->num_of_processes;
   Message msg;
@@ -49,21 +58,13 @@ int wait_for_all(Process *this, MessageType t) {
 
 int run_child_rutine(Process *this) {
 
-  // START section starts here
-  // print that child's process was started
+  // START section
   logger(this->log->processes, log_started_fmt, this->id, this->pid,
          this->parent_pid);
 
   Message msg;
-  msg.s_header.s_type = STARTED;
-  msg.s_header.s_magic = MESSAGE_MAGIC;
-  msg.s_header.s_local_time = time(NULL);
-  int msg_len = sprintf(msg.s_payload, log_started_fmt, this->id, this->pid,
-                        this->parent_pid);
-  msg.s_header.s_payload_len = msg_len;
+  create_message(&msg, STARTED, this);
 
-  // printf("Process %i  is going to send message \'%s\'\n", this->id,
-  // msg.s_payload);
   if (send_multicast(this, &msg) != 0) {
     printf("Fail to do multicast STARTED request from process %i\n", this->id);
     return 1;
@@ -88,11 +89,7 @@ int run_child_rutine(Process *this) {
   //        }
   // log that we've done all our work
 
-  msg.s_header.s_type = DONE;
-  msg.s_header.s_magic = MESSAGE_MAGIC;
-  msg.s_header.s_local_time = time(NULL);
-  msg_len = sprintf(msg.s_payload, log_done_fmt, this->id);
-  msg.s_header.s_payload_len = msg_len;
+    create_message(&msg, DONE, this);
 
   if (send_multicast(this, &msg) != 0) {
     printf("Fail to do multicast DONE request from process %i\n", this->id);
@@ -112,31 +109,48 @@ int run_child_rutine(Process *this) {
 
   fclose(this->log->pipes);
   fclose(this->log->processes);
-  // printf("end of process %d\n", this->id);
   free_process(this);
   exit(EXIT_SUCCESS);
 }
 
 int run_parent_rutine(Process *this) {
-  if (wait_for_all(this, STARTED) != 0) { // wait for START messages
+  // ------------ wait for all STARTED ------------------
+  if (wait_for_all(this, STARTED) != 0) {
     printf("Fail to receive all STARTED messages in parent %i\n", this->id);
     return 1;
   } else
     logger(this->log->processes, log_received_all_started_fmt, this->id);
+  // ------------ do robbery ----------------------------
 
   bank_robbery(this, this->num_of_processes - 1); // do robbery
 
-  // TODO: send for all STOP message
+  // ------------ send for all STOP message -------------
+  Message msg;
+  create_message(&msg, STOP, this);
 
-  if (wait_for_all(this, DONE) != 0) { // send done message for all
+  if (send_multicast(this, &msg) != 0) {
+    printf("Fail to do multicast STOP request from process parent %i\n", this->id);
+    return 1;
+  }
+  // ----------- wait for DONE messages from all -------
+  if (wait_for_all(this, DONE) != 0) {
     printf("Fail to receive all DONE messages %i\n", this->id);
     return 1;
   } else
     logger(this->log->processes, log_received_all_done_fmt, this->id);
+  //------------ collect BALANCE_HISTORY ---------------
 
-  // TODO: recive history messages from all
   AllHistory *all_history;
+
+  if (wait_for_history(this, BALANCE_HISTORY, all_history) != 0) {
+    printf("Fail to receive BALANCE_HISTORY from all clients %i\n", this->id);
+    return 1;
+  }
+  // ----------- print BALANCE_HISTORY -----------------
+
   print_history(all_history);
+
+  // ----------- close all processes ------------------
 
   for (int i = 1; i < this->num_of_processes; i++) {
     if (wait(NULL) == -1) {

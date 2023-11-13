@@ -11,6 +11,7 @@
 #define __IFMO_DISTRIBUTED_CLASS_BANKING__H
 
 #include "ipc.h"
+#include <time.h>
 
 typedef int16_t balance_t;
 
@@ -87,13 +88,15 @@ void bank_robbery(void * parent_data, local_id max_id);
 /** 
  * Returs the value of Lamport's clock.
  */
-timestamp_t get_lamport_time();
+// timestamp_t get_lamport_time();
 
 /** Returns physical time.
  *
  * Emulates physical clock (for each process).
  */
-timestamp_t get_physical_time();
+timestamp_t get_physical_time(){
+    return time(NULL);
+}
 
 /** Pretty print for BalanceHistories.
  * 
