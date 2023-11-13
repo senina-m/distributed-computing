@@ -18,6 +18,8 @@
     printf(str, __VA_ARGS__);                                                  \
   }
 
+int waiting_dst;
+
 void free_process(Process *ptr) {
   free_pipes(ptr->pipes, ptr->num_of_processes);
   free(ptr->log);
@@ -30,7 +32,7 @@ void create_message(Message *msg, MessageType type, void *contents, int len) {
   msg->s_header.s_local_time = get_physical_time();
   if (contents != NULL) {
     msg->s_header.s_payload_len = len;
-    memcpy(&(msg->s_payload), contents, len);
+    memcpy(msg->s_payload, contents, len);
   }
 }
 
@@ -70,6 +72,15 @@ int wait_for_history(Process *this, AllHistory *all_history) {
   }
   return 0;
 }
+// void wait_for_ack(Process* this){
+//   Message  msg;
+//   receive_any(this, &msg);
+//   if (msg.s_header.s_type == ACK) {
+//     logger(this->log->processes, log_transfer_out_fmt, this->id);
+//   } else {
+//     printf("ERROR resciving ASK from client %i", dst);
+//   }
+// }
 
 int run_child_rutine(Process *this) {
 
@@ -196,12 +207,10 @@ void transfer(void *parent_data, local_id src, local_id dst, balance_t amount) {
   create_message(&msg, TRANSFER, &order, sizeof(TransferOrder));
 
   send(this, dst, &msg);
-  logger(this->log->processes, log_transfer_in_fmt, this->id);
 
   // ----------- listen for ASK -----------------------
   receive(this, dst, &msg);
   if (msg.s_header.s_type == ACK) {
-    logger(this->log->processes, log_transfer_out_fmt, this->id);
   } else {
     printf("ERROR resciving ASK from client %i", dst);
   }
