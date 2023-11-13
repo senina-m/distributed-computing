@@ -3,6 +3,7 @@
 #include <string.h>
 #include <sys/wait.h>
 #include <time.h>
+#include <stdbool.h>
 
 #include "banking.h"
 #include "common.h"
@@ -12,10 +13,11 @@
 
 #define BUF_SIZE 1024
 
-#define logger(file, str, ...)                                                 \
-  {                                                                            \
-    fprintf(file, str, __VA_ARGS__);                                           \
-    printf(str, __VA_ARGS__);                                                  \
+#define logger(file, str, ...)                                                       \
+  {                                                                                  \
+    timestamp_t time = get_physical_time();                                          \
+    fprintf(file, str, time, __VA_ARGS__);                                           \
+    printf(str, time, __VA_ARGS__);                                                  \
   }
 
 int waiting_dst;
@@ -26,13 +28,13 @@ void free_process(Process *ptr) {
   free(ptr);
 }
 
-void create_message(Message *msg, MessageType type, void *contents, int len) {
+void create_message(Message* msg, MessageType type, void* contens, int len) {
   msg->s_header.s_type = type;
   msg->s_header.s_magic = MESSAGE_MAGIC;
   msg->s_header.s_local_time = get_physical_time();
-  if (contents != NULL) {
+  if (contens != NULL) {
+    memcpy(msg->s_payload, contens, len);
     msg->s_header.s_payload_len = len;
-    memcpy(msg->s_payload, contents, len);
   }
 }
 
@@ -103,8 +105,6 @@ int run_child_rutine(Process *this) {
     logger(this->log->processes, log_received_all_started_fmt, this->id);
 
   // here we do our work
-  logger(this->log->processes, log_done_fmt, this->id);
-
   // TODO:   while(){
   //          recive_message();
   //          if STOP
@@ -114,19 +114,80 @@ int run_child_rutine(Process *this) {
   //          if DONE -> send HISTORY
   //        }
   // log that we've done all our work
+  Message msg;
+  bool is_waiting = true;
+  while (is_waiting) {
+    receive_any(this, &msg);
+    switch (msg.s_header.s_type) {
+      case STOP:
+        is_waiting = false;
+        break;
+      case TRANSFER:
+        TransferOrder* order = msg.s_payload;
+        if (order->s_src == this->id) {
+          // change balance
+          send(this, order->s_dst, &msg);
+          logger(this->log->processes, log_transfer_out_fmt, this->id, order->s_amount, order->s_dst);
+        } else if (order->s_dst == this->id) {
+          // change balance
+          logger(this->log->processes, log_transfer_in_fmt, this->id, order->s_amount, order->s_src);
+          Message ack;
+          create_message(&ack, ACK, NULL, 0);
+          send(this, 0, &ack);
+        } else {
+          printf("Alien message receive: src %d, dst %d, in clid %d\n", order->s_src, order->s_dst, this->id);
+        }
+        break;
+      default:
+        printf("Non expected type of message receive %d in clid %d\n", msg.s_header.s_type, this->id);
+        break;
+    }
+  }
+
+  logger(this->log->processes, log_done_fmt, this->id);
 
   create_message(&msg, DONE, NULL, 0);
 
   if (send_multicast(this, &msg) != 0) {
-    printf("Fail to do multicast DONE request from process %i\n", this->id);
+    printf("Fail to do multicast DONE request from process %i in clid %d\n", this->id, this->id);
     return 1;
   }
 
-  if (wait_for_all(this, DONE) != 0) {
+  // TODO wait DONE from all or maybe some TRANSFER
+  int count = this->num_of_processes - 2;
+  while(count > 0) {
+    receive_any(this, &msg);
+    switch (msg.s_header.s_type) {
+      case TRANSFER:
+        TransferOrder* order = msg.s_payload;
+        if (order->s_src == this->id) {
+          printf("Too late to transfer message to src child %d\n", this->id);
+        } else if (order->s_dst == this->id) {
+          // change balance
+          logger(this->log->processes, log_transfer_in_fmt, this->id, order->s_amount, order->s_src);
+          Message ack;
+          create_message(&ack, ACK, NULL, 0);
+          send(this, 0, &ack);
+        } else {
+          printf("Alien message receive: src %d, dst %d, in clid %d\n", order->s_src, order->s_dst, this->id);
+        }
+        break;
+      case DONE:
+        count--;
+        break;
+      default:
+        printf("Non expected type of message receive %d\n", msg.s_header.s_type);
+        break;
+    }
+  }
+
+  /*if (wait_for_all(this, DONE) != 0) {
     printf("Fail to receive all DONE messages %i\n", this->id);
     return 1;
-  } else
-    logger(this->log->processes, log_received_all_done_fmt, this->id);
+  } else*/
+  logger(this->log->processes, log_received_all_done_fmt, this->id);
+
+  // TODO: send balance history to parent
 
   if (close_used_pipes(this) != 0) {
     printf("Fail to close used pipes %i\n", this->id);
