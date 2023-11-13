@@ -25,6 +25,7 @@ typedef struct{
     int num_of_processes; 
     Pipe*** pipes;
     Log* log;
+    balance_t balance;
 } Process;
 
 #endif // __IFMO_DISTRIBUTED_CLASS_PROCESSES__H
