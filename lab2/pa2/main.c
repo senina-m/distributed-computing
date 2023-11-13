@@ -78,14 +78,14 @@ int run_child_rutine(Process *this) {
   // here we do our work
   logger(this->log->processes, log_done_fmt, this->id);
 
-//TODO:   while(){
-//          recive_message();
-//          if STOP
-//          if TRANSFER -> 
-//              if THIS == src -> send money to dist
-//              else -> send ACK to parent
-//          if DONE -> send HISTORY
-//        }
+  // TODO:   while(){
+  //          recive_message();
+  //          if STOP
+  //          if TRANSFER ->
+  //              if THIS == src -> send money to dist
+  //              else -> send ACK to parent
+  //          if DONE -> send HISTORY
+  //        }
   // log that we've done all our work
 
   msg.s_header.s_type = DONE;
@@ -118,23 +118,23 @@ int run_child_rutine(Process *this) {
 }
 
 int run_parent_rutine(Process *this) {
-  if (wait_for_all(this, STARTED) != 0) { //wait for START messages
+  if (wait_for_all(this, STARTED) != 0) { // wait for START messages
     printf("Fail to receive all STARTED messages in parent %i\n", this->id);
     return 1;
   } else
     logger(this->log->processes, log_received_all_started_fmt, this->id);
 
-  bank_robbery(this, this->num_of_processes - 1); //do robbery
+  bank_robbery(this, this->num_of_processes - 1); // do robbery
 
-  //TODO: send for all STOP message
+  // TODO: send for all STOP message
 
-  if (wait_for_all(this, DONE) != 0) { //send done message for all
+  if (wait_for_all(this, DONE) != 0) { // send done message for all
     printf("Fail to receive all DONE messages %i\n", this->id);
     return 1;
   } else
     logger(this->log->processes, log_received_all_done_fmt, this->id);
 
-  //TODO: recive history messages from all
+  // TODO: recive history messages from all
   AllHistory *all_history;
   print_history(all_history);
 
@@ -157,10 +157,10 @@ int run_parent_rutine(Process *this) {
 }
 
 void transfer(void *parent_data, local_id src, local_id dst, balance_t amount) {
-  //TODO: student, please implement me
+  // TODO: student, please implement me
 
-    //send transfer request
-    //wait fro ACK message from dist
+  // send transfer request
+  // wait fro ACK message from dist
 }
 
 int main(int argc, const char *argv[]) {
