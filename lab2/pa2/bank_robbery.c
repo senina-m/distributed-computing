@@ -13,6 +13,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+uint8_t mytime = 0;
+
 void bank_robbery(void *parent_data, local_id max_id) {
   for (int i = 1; i < max_id; ++i) {
     transfer(parent_data, i, i + 1, i);
@@ -146,4 +148,8 @@ void print_history(const AllHistory *history) {
   }
   printf("\n");
   printf(hline);
+}
+
+timestamp_t get_physical_time(){
+    return ++mytime;
 }

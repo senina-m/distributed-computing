@@ -4,7 +4,7 @@ SRCDIR=pa2
 CC=gcc
 
 main: build
-	$(CC) -fsanitize=address $(SRCDIR)/main.c $(SRCDIR)/pipes.c $(SRCDIR)/ipc.c $(SRCDIR)/bank_robbery.c -o $(BUILDDIR)/runnable
+	$(CC) -fsanitize=address $(SRCDIR)/main.c $(SRCDIR)/pipes.c $(SRCDIR)/ipc.c $(SRCDIR)/bank_robbery.c -o $(BUILDDIR)/pa2
 
 build: clean
 	mkdir -p $(BUILDDIR)

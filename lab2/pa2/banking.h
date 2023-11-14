@@ -94,9 +94,7 @@ void bank_robbery(void * parent_data, local_id max_id);
  *
  * Emulates physical clock (for each process).
  */
-timestamp_t get_physical_time(){
-    return time(NULL);
-}
+timestamp_t get_physical_time();
 
 /** Pretty print for BalanceHistories.
  * 
