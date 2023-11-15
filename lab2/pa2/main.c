@@ -46,13 +46,33 @@ int wait_for_all(Process *this, MessageType t) {
   int n = this->num_of_processes - ((this->id == 0) ? 1 : 2);
   while (amount < n) {
     if (receive_any(this, &msg) == 0) {
+      // printf("DEBUG %i: go msg %i\n", this->id, msg.s_header.s_type);
       if (msg.s_header.s_type == t)
         amount++;
-      printf("DEBUG: this %i amount %i\n", this->id, amount);
+      // printf("DEBUG %i: amount %i\n", this->id, amount);
     } else {
       printf("Fail to recive message in process %i (wait_for_all)\n", this->id);
       // return 1;
     }
+  }
+  return 0;
+}
+
+int blocked_wait_for_all(Process *this, MessageType t) {
+  Message msg;
+  int n = this->num_of_processes;
+  local_id id = 1; //because parent doesn't send anything
+  while(id < n){
+      if(id == this->id) id++;
+      else{
+          if(receive(this, id, &msg) == 0){
+              // printf("Process %i received message \'%s\'\n", this->id, msg.s_payload);
+              if(msg.s_header.s_type == t) id++;
+          }else{
+              printf("Can't receive STARTED messages from process %i in process %i\n", id, this->id);
+              return 1;
+          }
+      }
   }
   return 0;
 }
@@ -76,9 +96,8 @@ int wait_for_history(Process *this, AllHistory *all_history) {
   return 0;
 }
 
-void print_h(BalanceState history) {
-  printf("DEBUG: history_stemp: balance_pending_in =%i, time=%i, balance=%i\n",
-         history.s_balance_pending_in, history.s_time, history.s_balance);
+void print_h(local_id id, BalanceState history) {
+  // printf("DEBUG %i: HISTORY time=%i, balance=%i\n", id, history.s_time, history.s_balance);
 }
 
 void fill_balance_history(BalanceState history[], uint8_t *len,
@@ -95,7 +114,7 @@ void fill_balance_history(BalanceState history[], uint8_t *len,
   history[time].s_balance = balance;
   history[time].s_time = time;
   history[time].s_balance_pending_in = 0;
-  print_h(history[time]);
+  // print_h(history[time]);
   *len = time;
 }
 
@@ -112,13 +131,13 @@ int run_child_rutine(Process *this) {
     return 1;
   }
 
-  if (wait_for_all(this, STARTED) != 0) {
+  if (blocked_wait_for_all(this, STARTED) != 0) {
     printf("Fail to receive all STARTED messages in child %i\n", this->id);
     return 1;
   } else
     logger(this->log->processes, log_received_all_started_fmt, this->id);
 
-  BalanceState history[MAX_T + 1] = {0};
+  BalanceState history[MAX_T + 1];
   history[0].s_balance = this->balance;
   history[0].s_balance_pending_in = 0;
   history[0].s_time = 0;
@@ -128,37 +147,34 @@ int run_child_rutine(Process *this) {
   bool is_waiting = true;
   TransferOrder *order;
   while (is_waiting) {
-    printf("DEBUG %i: try to receive some msg\n", this->id);
+    // printf("DEBUG %i: try to receive some msg\n", this->id);
     receive_any(this, &receive_msg);
     switch (receive_msg.s_header.s_type) {
     case STOP:
-      printf("DEBUG %i: RECEIVE STOP\n", this->id);
+      // printf("DEBUG %i: RECEIVE STOP\n", this->id);
       is_waiting = false;
       break;
     case TRANSFER:
-      printf("DEBUG %i: RECEIVE TRANSFER\n", this->id);
+      // printf("DEBUG %i: RECEIVE TRANSFER\n", this->id);
 
       order = (TransferOrder *)receive_msg.s_payload;
-      printf("DEBUG %i: order_src=%i order_dst=%i\n", this->id, order->s_src,
-             order->s_dst);
       if (order->s_src == this->id) {
+        // printf("DEBUG %i: TRANSFER SRC\n", this->id);
         timestamp_t now = get_physical_time();
         this->balance -= order->s_amount;
         fill_balance_history(history, &history_len, now, this->balance);
-
-        printf("DEBUG %i: send amount=%i to=%i\n", this->id, order->s_amount,
-               order->s_dst);
+        print_h(this->id, history[now]);
+        // printf("DEBUG %i: send amount=%i to=%i\n", this->id, order->s_amount, order->s_dst);
         send(this, order->s_dst, &receive_msg);
         logger(this->log->processes, log_transfer_out_fmt, this->id,
                order->s_amount, order->s_dst);
       } else if (order->s_dst == this->id) {
+        // printf("DEBUG %i: TRANSFER DST\n", this->id);
         timestamp_t now = get_physical_time();
         this->balance += order->s_amount;
-        printf("DEBUG %i: filling history, len=%i...\n", this->id, history_len);
         fill_balance_history(history, &history_len, now, this->balance);
-
-        printf("DEBUG %i: send ACK that I received amount=%i from=%i\n",
-               this->id, order->s_amount, order->s_src);
+        print_h(this->id, history[now]);
+        // printf("DEBUG %i: send ACK that I received amount=%i from=%i\n", this->id, order->s_amount, order->s_src);
         logger(this->log->processes, log_transfer_in_fmt, this->id,
                order->s_amount, order->s_src);
         Message ack;
@@ -231,7 +247,7 @@ int run_child_rutine(Process *this) {
                  sizeof(local_id) + sizeof(uint8_t) + s_history_len);
   send(this, 0, &his_msg);
 
-  printf("DEBUG %i: sent HISTORY to parent\n", this->id);
+  // printf("DEBUG %i: sent HISTORY to parent\n", this->id);
 
   if (close_used_pipes(this) != 0) {
     printf("Fail to close used pipes %i\n", this->id);
@@ -254,7 +270,7 @@ int run_parent_rutine(Process *this) {
     logger(this->log->processes, log_received_all_started_fmt, this->id);
 
   // ------------ do robbery ----------------------------
-  printf("DEBUG: DO BANCK ROBBERY\n");
+  // printf("DEBUG: DO BANCK ROBBERY\n");
   bank_robbery(this, this->num_of_processes - 1); // do robbery
 
   // ------------ send for all STOP message -------------
@@ -317,14 +333,13 @@ void transfer(void *parent_data, local_id src, local_id dst, balance_t amount) {
   order.s_dst = dst;
   order.s_amount = amount;
   create_message(&msg, TRANSFER, &order, sizeof(TransferOrder));
-  printf("DEBUG %i: sent TRANSFER from %i to %i amount=%i \n", this->id, src,
-         dst, amount);
+  // printf("DEBUG %i: sent TRANSFER from %i to %i amount=%i \n", this->id, src, dst, amount);
   send(this, src, &msg);
 
   // ----------- listen for ASK -----------------------
   receive(this, dst, &msg);
   if (msg.s_header.s_type == ACK) {
-    printf("DEBUG %i: receive ACK from %i\n", this->id, dst);
+    // printf("DEBUG %i: receive ACK from %i\n", this->id, dst);
   } else {
     printf("ERROR resciving ASK from client %i", dst);
   }

@@ -30,8 +30,8 @@ int init_pipes(Process* this){
                 if (pipe(fd) == 0){
                     this->pipes[i][j]->fr = fd[0];
                     this->pipes[i][j]->fw = fd[1];
-                    // fcntl( fd[0], F_SETFL, fcntl(fd[0], F_GETFL) | O_NONBLOCK);
                     fcntl( fd[0], F_SETFL, O_NONBLOCK);
+                    fcntl( fd[1], F_SETFL, O_NONBLOCK);
                     fprintf(this->log->pipes, "Process %i opens pipe %i -> %i, with descriptors r:%i, w:%i\n", this->id, i, j, fd[0], fd[1]);
                     // printf("Process %i opens pipe %i -> %i, with descriptors r:%i, w:%i\n", this->id, i, j, fd[0], fd[1]);
                 }else{

@@ -13,7 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-uint8_t mytime = 0;
+// uint8_t mytime = 0;
 
 void bank_robbery(void *parent_data, local_id max_id) {
   for (int i = 1; i < max_id; ++i) {
@@ -23,7 +23,7 @@ void bank_robbery(void *parent_data, local_id max_id) {
     transfer(parent_data, max_id, 1, 1);
   }
 }
-
+/*
 void print_history(const AllHistory *history) {
   if (history == NULL) {
     fprintf(stderr, "print_history: history is NULL!\n");
@@ -153,3 +153,4 @@ void print_history(const AllHistory *history) {
 timestamp_t get_physical_time(){
     return ++mytime;
 }
+*/
