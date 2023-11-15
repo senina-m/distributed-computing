@@ -10,12 +10,13 @@
 #include "ipc.h"
 #include "pa2345.h"
 #include "pipes.h"
+#include "lamport.h"
 
 #define BUF_SIZE 1024
 
 #define logger(file, str, ...)                                                 \
   {                                                                            \
-    timestamp_t time = get_physical_time();                                    \
+    timestamp_t time = get_lamport_time();                                    \
     fprintf(file, str, time, __VA_ARGS__);                                     \
     printf(str, time, __VA_ARGS__);                                            \
   }
@@ -29,7 +30,7 @@ void free_process(Process *ptr) {
 void create_message(Message *msg, MessageType type, void *contens, int len) {
   msg->s_header.s_type = type;
   msg->s_header.s_magic = MESSAGE_MAGIC;
-  msg->s_header.s_local_time = get_physical_time();
+  msg->s_header.s_local_time = -1;
   if (contens != NULL) {
     memcpy(msg->s_payload, contens, len);
     msg->s_header.s_payload_len = len;
@@ -43,7 +44,7 @@ int wait_for_all(Process *this, MessageType t) {
   // wait n-2;
   int n = this->num_of_processes - ((this->id == 0) ? 1 : 2);
   while (amount < n) {
-    if (receive_any(this, &msg) == 0) {
+    if (lamport_receive_any(this, &msg) == 0) {
       // printf("DEBUG %i: go msg %i\n", this->id, msg.s_header.s_type);
       if (msg.s_header.s_type == t)
         amount++;
@@ -59,11 +60,11 @@ int wait_for_all(Process *this, MessageType t) {
 int blocked_wait_for_all(Process *this, MessageType t) {
   Message msg;
   int n = this->num_of_processes;
-  local_id id = 1; //because parent doesn't send anything
+  local_id id = 1; //because parent doesn't lamport_send anything
   while(id < n){
       if(id == this->id) id++;
       else{
-          if(receive(this, id, &msg) == 0){
+          if(lamport_receive(this, id, &msg) == 0){
               // printf("Process %i received message \'%s\'\n", this->id, msg.s_payload);
               if(msg.s_header.s_type == t) id++;
           }else{
@@ -79,7 +80,7 @@ int wait_for_history(Process *this, AllHistory *all_history) {
   Message msg;
   all_history->s_history_len = 0;
   while (all_history->s_history_len < this->num_of_processes - 1) {
-    if (receive_any(this, &msg) == 0) {
+    if (lamport_receive_any(this, &msg) == 0) {
       if (msg.s_header.s_type == BALANCE_HISTORY) {
         BalanceHistory history;
         memcpy(&history, &(msg.s_payload), sizeof(msg.s_payload));
@@ -94,26 +95,37 @@ int wait_for_history(Process *this, AllHistory *all_history) {
   return 0;
 }
 
-void print_h(local_id id, BalanceState history) {
-  // printf("DEBUG %i: HISTORY time=%i, balance=%i\n", id, history.s_time, history.s_balance);
+void print_h(local_id id, BalanceState* history, uint8_t len) {
+  printf("DEBUG %i: HISTORY time=%i, balance=%i pending=%i\n", 
+  id, history[len].s_time, history[len].s_balance, history[len].s_balance_pending_in);
 }
 
 void fill_balance_history(BalanceState history[], uint8_t *len,
-                          timestamp_t time, balance_t balance) {
+                          timestamp_t time, balance_t balance, balance_t pending) {
   balance_t current_bal = history[*len].s_balance;
+  balance_t current_pen = history[*len].s_balance_pending_in;
   // printf("DEBUG: current_bal=%i, time=%i, balance=%i, len=%i\n", current_bal, time, balance, *len);
   
   for (uint8_t i = *len + 1; i < time; i++) {
-    history[i].s_balance_pending_in = 0;
+    history[i].s_balance_pending_in = current_pen;
     history[i].s_time = i;
     history[i].s_balance = current_bal;
-    // print_h(history[i]);
   }
   history[time].s_balance = balance;
   history[time].s_time = time;
-  history[time].s_balance_pending_in = 0;
-  // print_h(history[time]);
+  // printf("DEBUG: %i=cur_pend %i=new_pend\n", current_pen, pending);
+  history[time].s_balance_pending_in = current_pen +  pending;
   *len = time;
+}
+
+void change_balance(Process* this, BalanceState* history, uint8_t* len, balance_t amount){
+  timestamp_t now = get_lamport_time();
+  this->balance += amount;
+  // balance_t pending = amount > 0? 0 : -amount;
+  balance_t pending = -amount;
+  fill_balance_history(history, len, now, this->balance, pending);
+  // print_h(this->id, history, *len);
+  // printf("DEBUG %i: send ACK that I received amount=%i from=%i\n", this->id, order->s_amount, order->s_src);
 }
 
 int run_child_rutine(Process *this) {
@@ -124,7 +136,7 @@ int run_child_rutine(Process *this) {
   Message msg;
   create_message(&msg, STARTED, NULL, 0);
 
-  if (send_multicast(this, &msg) != 0) {
+  if (lamport_send_multicast(this, &msg) != 0) {
     printf("Fail to do multicast STARTED request from process %i\n", this->id);
     return 1;
   }
@@ -146,38 +158,30 @@ int run_child_rutine(Process *this) {
   TransferOrder *order;
   while (is_waiting) {
     // printf("DEBUG %i: try to receive some msg\n", this->id);
-    receive_any(this, &receive_msg);
+    lamport_receive_any(this, &receive_msg);
     switch (receive_msg.s_header.s_type) {
     case STOP:
-      // printf("DEBUG %i: RECEIVE STOP\n", this->id);
+      // printf("DEBUG %i: receive STOP\n", this->id);
       is_waiting = false;
       break;
     case TRANSFER:
-      // printf("DEBUG %i: RECEIVE TRANSFER\n", this->id);
+      // printf("DEBUG %i: receive TRANSFER\n", this->id);
 
       order = (TransferOrder *)receive_msg.s_payload;
       if (order->s_src == this->id) {
         // printf("DEBUG %i: TRANSFER SRC\n", this->id);
-        timestamp_t now = get_physical_time();
-        this->balance -= order->s_amount;
-        fill_balance_history(history, &history_len, now, this->balance);
-        print_h(this->id, history[now]);
-        // printf("DEBUG %i: send amount=%i to=%i\n", this->id, order->s_amount, order->s_dst);
-        send(this, order->s_dst, &receive_msg);
+        change_balance(this, history, &history_len, -order->s_amount);
+        lamport_send(this, order->s_dst, &receive_msg);
         logger(this->log->processes, log_transfer_out_fmt, this->id,
                order->s_amount, order->s_dst);
       } else if (order->s_dst == this->id) {
         // printf("DEBUG %i: TRANSFER DST\n", this->id);
-        timestamp_t now = get_physical_time();
-        this->balance += order->s_amount;
-        fill_balance_history(history, &history_len, now, this->balance);
-        print_h(this->id, history[now]);
-        // printf("DEBUG %i: send ACK that I received amount=%i from=%i\n", this->id, order->s_amount, order->s_src);
+        change_balance(this, history, &history_len, order->s_amount);
         logger(this->log->processes, log_transfer_in_fmt, this->id,
                order->s_amount, order->s_src);
         Message ack;
         create_message(&ack, ACK, NULL, 0);
-        send(this, 0, &ack);
+        lamport_send(this, 0, &ack);
       } else {
         printf("Alien message receive: src %d, dst %d, in clid %d\n",
                order->s_src, order->s_dst, this->id);
@@ -194,7 +198,7 @@ int run_child_rutine(Process *this) {
 
   create_message(&msg, DONE, NULL, 0);
 
-  if (send_multicast(this, &msg) != 0) {
+  if (lamport_send_multicast(this, &msg) != 0) {
     printf("Fail to do multicast DONE request from process %i in clid %d\n",
            this->id, this->id);
     return 1;
@@ -202,22 +206,18 @@ int run_child_rutine(Process *this) {
 
   int count = this->num_of_processes - 2;
   while (count > 0) {
-    receive_any(this, &msg);
+    lamport_receive_any(this, &msg);
     switch (msg.s_header.s_type) {
     case TRANSFER:
       order = (TransferOrder *)msg.s_payload;
       if (order->s_src == this->id) {
         printf("Too late to transfer message to src child %d\n", this->id);
       } else if (order->s_dst == this->id) {
-        timestamp_t now = get_physical_time();
-        this->balance += order->s_amount;
-        fill_balance_history(history, &history_len, now, this->balance);
-
-        logger(this->log->processes, log_transfer_in_fmt, this->id,
-               order->s_amount, order->s_src);
+        change_balance(this, history, &history_len, order->s_amount);
+        logger(this->log->processes, log_transfer_in_fmt, this->id, order->s_amount, order->s_src);
         Message ack;
         create_message(&ack, ACK, NULL, 0);
-        send(this, 0, &ack);
+        lamport_send(this, 0, &ack);
       } else {
         printf("Alien message receive: src %d, dst %d, in clid %d\n",
                order->s_src, order->s_dst, this->id);
@@ -233,7 +233,7 @@ int run_child_rutine(Process *this) {
   }
 
   logger(this->log->processes, log_received_all_done_fmt, this->id);
-  fill_balance_history(history, &history_len, get_physical_time(), this->balance);
+  fill_balance_history(history, &history_len, get_lamport_time(), this->balance, 0);
   history_len++;
   size_t s_history_len = sizeof(BalanceState) * history_len;
   BalanceHistory b_history;
@@ -243,7 +243,7 @@ int run_child_rutine(Process *this) {
   Message his_msg;
   create_message(&his_msg, BALANCE_HISTORY, &b_history,
                  sizeof(local_id) + sizeof(uint8_t) + s_history_len);
-  send(this, 0, &his_msg);
+  lamport_send(this, 0, &his_msg);
 
   // printf("DEBUG %i: sent HISTORY to parent\n", this->id);
 
@@ -271,18 +271,18 @@ int run_parent_rutine(Process *this) {
   // printf("DEBUG: DO BANCK ROBBERY\n");
   bank_robbery(this, this->num_of_processes - 1); // do robbery
 
-  // ------------ send for all STOP message -------------
+  // ------------ lamport_send for all STOP message -------------
   Message msg;
   create_message(&msg, STOP, NULL, 0);
 
-  if (send_multicast(this, &msg) != 0) {
+  if (lamport_send_multicast(this, &msg) != 0) {
     printf("Fail to do multicast STOP request from process parent %i\n",
            this->id);
     return 1;
   }
   // ----------- wait for DONE messages from all -------
   if (wait_for_all(this, DONE) != 0) {
-    printf("Fail to receive all DONE messages %i\n", this->id);
+    printf("Fail to lamport_receive all DONE messages %i\n", this->id);
     return 1;
   } else
     logger(this->log->processes, log_received_all_done_fmt, this->id);
@@ -324,7 +324,7 @@ int run_parent_rutine(Process *this) {
 
 void transfer(void *parent_data, local_id src, local_id dst, balance_t amount) {
   Process *this = (Process *)parent_data;
-  // ----------- send transfer request ----------------
+  // ----------- lamport_send transfer request ----------------
   Message msg;
   TransferOrder order;
   order.s_src = src;
@@ -332,12 +332,12 @@ void transfer(void *parent_data, local_id src, local_id dst, balance_t amount) {
   order.s_amount = amount;
   create_message(&msg, TRANSFER, &order, sizeof(TransferOrder));
   // printf("DEBUG %i: sent TRANSFER from %i to %i amount=%i \n", this->id, src, dst, amount);
-  send(this, src, &msg);
+  lamport_send(this, src, &msg);
 
   // ----------- listen for ASK -----------------------
-  receive(this, dst, &msg);
+  lamport_receive(this, dst, &msg);
   if (msg.s_header.s_type == ACK) {
-    // printf("DEBUG %i: receive ACK from %i\n", this->id, dst);
+    // printf("DEBUG %i: lamport_receive ACK from %i\n", this->id, dst);
   } else {
     printf("ERROR resciving ASK from client %i", dst);
   }

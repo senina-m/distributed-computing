@@ -1,5 +1,6 @@
 #include "ipc.h"
 #include "processes.h"
+#include "lamport.h"
 #include <errno.h>
 
 int send(void *self, local_id dst, const Message *msg) {

@@ -27,7 +27,6 @@ typedef struct{
     Pipe*** pipes;
     Log* log;
     balance_t balance;
-    timestamp_t time;
 } Process;
 
 #endif // __IFMO_DISTRIBUTED_CLASS_PROCESSES__H
