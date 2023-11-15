@@ -1,12 +1,6 @@
 .vscode
-lab1/build
-lab1/pipes.log
-lab1/events.log
-lab1/pa1.tar.gz
-lab1/src/pa1.tar.gz
-
-lab2/build
-lab2/pipes.log
-lab2/events.log
-lab2/pa2.tar.gz
-lab2/src/pa2.tar.gz
+lab*/build
+lab*/pipes.log
+lab*/events.log
+lab*/pa*.tar.gz
+lab*/src/pa*.tar.gz
