@@ -42,3 +42,13 @@ int lamport_receive_any(Process*this, Message *msg) {
     return ret;
 
 }
+
+void create_message(Message *msg, MessageType type, void *contens, int len) {
+  msg->s_header.s_type = type;
+  msg->s_header.s_magic = MESSAGE_MAGIC;
+  msg->s_header.s_local_time = -1;
+  if (contens != NULL) {
+    memcpy(msg->s_payload, contens, len);
+    msg->s_header.s_payload_len = len;
+  }
+}

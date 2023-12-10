@@ -64,62 +64,11 @@ int blocked_wait_for_all(Process *this, MessageType t) {
   return 0;
 }
 
-int wait_for_history(Process *this, AllHistory *all_history) {
-  Message msg;
-  all_history->s_history_len = 0;
-  while (all_history->s_history_len < this->num_of_processes - 1) {
-    if (lamport_receive_any(this, &msg) == 0) {
-      if (msg.s_header.s_type == BALANCE_HISTORY) {
-        BalanceHistory history;
-        memcpy(&history, &(msg.s_payload), sizeof(msg.s_payload));
-        all_history->s_history[history.s_id - 1] = history;
-        all_history->s_history_len++;
-      }
-    } else {
-      printf("Can't receive BALANCE messages in parent \n");
-      return 1;
-    }
-  }
-  return 0;
-}
-
-void print_h(local_id id, BalanceState* history, uint8_t len) {
-  printf("DEBUG %i: HISTORY time=%i, balance=%i pending=%i\n", 
-  id, history[len].s_time, history[len].s_balance, history[len].s_balance_pending_in);
-}
-
-void fill_balance_history(BalanceState history[], uint8_t *len,
-                          timestamp_t time, balance_t balance, balance_t pending) {
-  balance_t current_bal = history[*len].s_balance;
-  balance_t current_pen = history[*len].s_balance_pending_in;
-  // printf("DEBUG: current_bal=%i, time=%i, balance=%i, len=%i\n", current_bal, time, balance, *len);
-  
-  for (uint8_t i = *len + 1; i < time; i++) {
-    history[i].s_balance_pending_in = current_pen;
-    history[i].s_time = i;
-    history[i].s_balance = current_bal;
-  }
-  history[time].s_balance = balance;
-  history[time].s_time = time;
-  // printf("DEBUG: %i=cur_pend %i=new_pend\n", current_pen, pending);
-  history[time].s_balance_pending_in = current_pen +  pending;
-  *len = time;
-}
-
-void change_balance(Process* this, BalanceState* history, uint8_t* len, balance_t amount){
-  timestamp_t now = get_lamport_time();
-  this->balance += amount;
-  // balance_t pending = amount > 0? 0 : -amount;
-  balance_t pending = -amount;
-  fill_balance_history(history, len, now, this->balance, pending);
-  // print_h(this->id, history, *len);
-  // printf("DEBUG %i: send ACK that I received amount=%i from=%i\n", this->id, order->s_amount, order->s_src);
-}
 
 int run_child_rutine(Process *this) {
   // START section
   logger(this->log->processes, log_started_fmt, this->id, this->pid,
-         this->parent_pid, this->balance);
+         this->parent_pid, 0);
 
   Message msg;
   create_message(&msg, STARTED, NULL, 0);
@@ -135,11 +84,8 @@ int run_child_rutine(Process *this) {
   } else
     logger(this->log->processes, log_received_all_started_fmt, this->id);
 
-  BalanceState history[MAX_T + 1];
-  history[0].s_balance = this->balance;
-  history[0].s_balance_pending_in = 0;
-  history[0].s_time = 0;
-  uint8_t history_len = 0;
+  // 3. Ждет от них ответа (ok)
+// 4. Получив все ответы, ждет, когда он станет первым в своей очереди, и входит в критическую секцию
 
   Message receive_msg;
   bool is_waiting = true;
@@ -152,29 +98,6 @@ int run_child_rutine(Process *this) {
       // printf("DEBUG %i: receive STOP\n", this->id);
       is_waiting = false;
       break;
-    case TRANSFER:
-      // printf("DEBUG %i: receive TRANSFER\n", this->id);
-
-      order = (TransferOrder *)receive_msg.s_payload;
-      if (order->s_src == this->id) {
-        // printf("DEBUG %i: TRANSFER SRC\n", this->id);
-        change_balance(this, history, &history_len, -order->s_amount);
-        lamport_send(this, order->s_dst, &receive_msg);
-        logger(this->log->processes, log_transfer_out_fmt, this->id,
-               order->s_amount, order->s_dst);
-      } else if (order->s_dst == this->id) {
-        // printf("DEBUG %i: TRANSFER DST\n", this->id);
-        change_balance(this, history, &history_len, order->s_amount);
-        logger(this->log->processes, log_transfer_in_fmt, this->id,
-               order->s_amount, order->s_src);
-        Message ack;
-        create_message(&ack, ACK, NULL, 0);
-        lamport_send(this, 0, &ack);
-      } else {
-        printf("Alien message receive: src %d, dst %d, in clid %d\n",
-               order->s_src, order->s_dst, this->id);
-      }
-      break;
     default:
       printf("Non expected type of message receive %d in clid %d\n",
              msg.s_header.s_type, this->id);
@@ -182,7 +105,7 @@ int run_child_rutine(Process *this) {
     }
   }
 
-  logger(this->log->processes, log_done_fmt, this->id, this->balance);
+  logger(this->log->processes, log_done_fmt, this->id, 0);
 
   create_message(&msg, DONE, NULL, 0);
 
@@ -196,21 +119,6 @@ int run_child_rutine(Process *this) {
   while (count > 0) {
     lamport_receive_any(this, &msg);
     switch (msg.s_header.s_type) {
-    case TRANSFER:
-      order = (TransferOrder *)msg.s_payload;
-      if (order->s_src == this->id) {
-        printf("Too late to transfer message to src child %d\n", this->id);
-      } else if (order->s_dst == this->id) {
-        change_balance(this, history, &history_len, order->s_amount);
-        logger(this->log->processes, log_transfer_in_fmt, this->id, order->s_amount, order->s_src);
-        Message ack;
-        create_message(&ack, ACK, NULL, 0);
-        lamport_send(this, 0, &ack);
-      } else {
-        printf("Alien message receive: src %d, dst %d, in clid %d\n",
-               order->s_src, order->s_dst, this->id);
-      }
-      break;
     case DONE:
       count--;
       break;
@@ -221,19 +129,6 @@ int run_child_rutine(Process *this) {
   }
 
   logger(this->log->processes, log_received_all_done_fmt, this->id);
-  fill_balance_history(history, &history_len, get_lamport_time(), this->balance, 0);
-  history_len++;
-  size_t s_history_len = sizeof(BalanceState) * history_len;
-  BalanceHistory b_history;
-  memcpy(b_history.s_history, history, s_history_len);
-  b_history.s_history_len = history_len;
-  b_history.s_id = this->id;
-  Message his_msg;
-  create_message(&his_msg, BALANCE_HISTORY, &b_history,
-                 sizeof(local_id) + sizeof(uint8_t) + s_history_len);
-  lamport_send(this, 0, &his_msg);
-
-  // printf("DEBUG %i: sent HISTORY to parent\n", this->id);
 
   if (close_used_pipes(this) != 0) {
     printf("Fail to close used pipes %i\n", this->id);
@@ -257,7 +152,7 @@ int run_parent_rutine(Process *this) {
 
   // ------------ do robbery ----------------------------
   // printf("DEBUG: DO BANCK ROBBERY\n");
-  bank_robbery(this, this->num_of_processes - 1); // do robbery
+  // bank_robbery(this, this->num_of_processes - 1); // do robbery
 
   // ------------ lamport_send for all STOP message -------------
   Message msg;
@@ -274,21 +169,6 @@ int run_parent_rutine(Process *this) {
     return 1;
   } else
     logger(this->log->processes, log_received_all_done_fmt, this->id);
-  //------------ collect BALANCE_HISTORY ---------------
-
-  AllHistory *all_history = (AllHistory*)malloc(sizeof(AllHistory));
-  if (wait_for_history(this, all_history) != 0) {
-    printf("Fail to receive BALANCE_HISTORY from all clients %i\n", this->id);
-    return 1;
-  }
-  // ----------- print BALANCE_HISTORY -----------------
-
-  print_history(all_history);
-  // printf("DEBUG: HISTORY 1\n");
-  // for (int i = 0; i < all_history[0].s_history_len; i++){
-  //   print_h((all_history[0]).s_history);
-  // }
-  free(all_history);
 
   // ----------- close all processes ------------------
 
@@ -346,16 +226,6 @@ int main(int argc, const char *argv[]) {
     }
   }
 
-  balance_t *balances = (balance_t *)malloc(sizeof(balance_t) * (total_N - 1));
-  if (argc < total_N + 2) { // command + -p + N + balance*(N-1)
-    printf("Too little amount of balances for clients!\n");
-    return -1;
-  } else {
-    for (int i = 0; i < total_N - 1; i++) {
-      balances[i] = atoi(argv[3 + i]);
-    }
-  }
-
   // setup parent process
   Process *this = mmalloc(Process);
   this->id = 0;
@@ -367,7 +237,6 @@ int main(int argc, const char *argv[]) {
   this->log->processes = fopen(events_log, "a");
   this->log->pipes = fopen(pipes_log, "w");
   this->pipes = alloc_pipes(total_N);
-  this->balance = -1;
 
   if (init_pipes(this))
     return -1;
@@ -379,12 +248,10 @@ int main(int argc, const char *argv[]) {
       this->parent_pid = my_parent_pid;
       this->pid = getpid();
       this->id = i;
-      this->balance = balances[i - 1];
 
       break;
     }
   }
-  free(balances);
 
   if (close_unused_pipes(this))
     return -1;

@@ -33,7 +33,6 @@ typedef struct{
     int num_of_processes; 
     Pipe*** pipes;
     Log* log;
-    balance_t balance;
     bool is_cs;
 } Process;
 

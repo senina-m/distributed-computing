@@ -1,4 +1,8 @@
-#include "cs.h"
+#include "pa2345.h"
+#include "banking.h"
+#include "processes.h"
+#include "ipc.h"
+#include "lamport.h"
 
 typedef struct {
   timestamp_t time;
@@ -49,29 +53,25 @@ void add_queue(timestamp_t time, local_id id) {
   queue->nodes[queue->len - 1].time = time;
 }
 
-int request_cs(Process *this) {
+int request_cs(void * process) {
+  Process* this = (Process*) process;
 // 1. Добавляет свой запрос в свою очередь (т.е временную метку и номер потока)
+  add_queue(get_lamport_time(), this->id);
 // 2. Посылает всем потокам запрос (req)
-// 3. Ждет от них ответа (ok)
-// 4. Получив все ответы, ждет, когда он станет первым в своей очереди, и входит в критическую секцию
+  Message msg;
+  Node node;
+  node.id = this->id;
+  node.time = get_lamport_time();
+  create_message(&msg, CS_REQUEST, &node, sizeof(Node));
 }
 
-int release_cs(Process *this) {
+int release_cs(void * process) {
 // 5. Выйдя из критической секции, удаляет свой запрос из своей очереди, посылает всем сообщение о том, что вышел (rel)
+  Process* this = (Process*) process;
   printf("DEBUG %i: RELEASE critical section\n", this->id);
   pop_queue();
   Message msg;
   create_message(&msg, CS_RELEASE, NULL, 0);
   int lamport_send_multicast(this, msg);
   return 0;
-}
-
-void create_message(Message *msg, MessageType type, void *contens, int len) {
-  msg->s_header.s_type = type;
-  msg->s_header.s_magic = MESSAGE_MAGIC;
-  msg->s_header.s_local_time = -1;
-  if (contens != NULL) {
-    memcpy(msg->s_payload, contens, len);
-    msg->s_header.s_payload_len = len;
-  }
 }
