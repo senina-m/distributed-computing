@@ -3,6 +3,7 @@
 #include "ipc.h"
 #include "lamport.h"
 #include "pa2345.h"
+#include <stdlib.h>
 
 typedef struct {
   timestamp_t time;
@@ -54,7 +55,7 @@ void add_queue(Node *node) {
   queue->nodes[queue->len - 1].time = node->time;
 }
 
-void wait_cs(Process *this) {
+int wait_cs(Process *this) {
   Message msg;
   // пока мы не на вершине очереди -- ждём ответов других
   while (queue->nodes[0].id != this->id) {
@@ -67,7 +68,7 @@ void wait_cs(Process *this) {
       }
     } else {
       printf("Fail to recive message in process %i (wait_for_all)\n", this->id);
-      // return 1;
+      return 1;
     }
   }
   return 0;
@@ -88,7 +89,7 @@ int request_cs(const void * self){
   // 3. Ждет от них ответа (ok)
   // 4. Получив все ответы, ждет, когда он станет первым в своей очереди, и
   // входит в критическую секцию
-  wait_cs(this);
+  return wait_cs(this);
 }
 
 int release_cs(const void * self){
@@ -99,10 +100,10 @@ int release_cs(const void * self){
   pop_queue();
   Message msg;
   create_message(&msg, CS_RELEASE, NULL, 0);
-  int lamport_send_multicast(this, msg);
+  lamport_send_multicast(this, &msg);
   return 0;
 }
 
 void print(const char * s){
-  printf(s);
+  printf("%s", s);
 }
