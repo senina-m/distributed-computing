@@ -3,13 +3,12 @@ BUILDDIR=build
 SRCDIR=pa4
 CC=clang
 
-# export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/home/marsen/itmo/distributed_computing/lab4/pa4"
-# mkdir -p build
+# export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/home/marsen/itmo/distributed_computing/lab4/pa4/lib64"
 
 LD_PRELOAD=/home/marsen/itmo/distributed_computing/lab4/pa4/lib64/libruntime.so ./build/pa4 -p
 
 main: build
-	$(CC) -L./pa4/lib64/ -lruntime -std=c99 -Wall -pedantic $(SRCDIR)/main.c $(SRCDIR)/pipes.c $(SRCDIR)/ipc.c $(SRCDIR)/lamport.c $(SRCDIR)/cs.c -o $(BUILDDIR)/pa4 
+	$(CC) -L./pa4/lib64/ -lruntime -fsanitize=address -std=c99 -Wall -pedantic $(SRCDIR)/main.c $(SRCDIR)/pipes.c $(SRCDIR)/ipc.c $(SRCDIR)/lamport.c $(SRCDIR)/cs.c $(SRCDIR)/queue.c -o $(BUILDDIR)/pa4 
 
 build: clean
 	mkdir -p $(BUILDDIR)

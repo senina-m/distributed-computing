@@ -10,6 +10,7 @@
 #include "pa2345.h"
 #include "pipes.h"
 #include "lamport.h"
+#include "queue.h"
 
 bool critical = false;
 
@@ -83,6 +84,7 @@ int run_child_rutine(Process *this) {
   } else
     logger(this->log->processes, log_received_all_started_fmt, this->id);
 
+  printf("DEBUG %i: CHILD Start doing real work\n", this->id);
   for (int i = 1; i <= this->id * 5; i++){
 		if (critical){
 			request_cs(this);
@@ -102,6 +104,7 @@ int run_child_rutine(Process *this) {
 
     printf("DEBUG %i: Out of CS\n", this->id);
 	}
+  printf("DEBUG %i: CLILD done with his real work\n", this->id);
 
   logger(this->log->processes, log_done_fmt, this->id, 0);
 
@@ -113,10 +116,17 @@ int run_child_rutine(Process *this) {
     return 1;
   }
 
-  if(wait_for_all(this, DONE) != 0){
-    printf("Fail to receive all DONE messages %i\n", this->id);
-    return 1;
-  }else logger(this->log->processes, log_received_all_done_fmt, this->id);
+  int amount = this->num_of_processes;
+  while (amount > 0){
+		while (lamport_receive_any(this, &msg)) continue;
+    if(msg.s_header.s_type == DONE){
+      amount--;
+    }else if (msg.s_header.s_type == CS_REQUEST){
+      manage_request(this, &msg);
+    }
+	}
+
+  logger(this->log->processes, log_received_all_done_fmt, this->id);
 
   if (close_used_pipes(this) != 0) {
     printf("Fail to close used pipes %i\n", this->id);
@@ -138,19 +148,6 @@ int run_parent_rutine(Process *this) {
   } else
     logger(this->log->processes, log_received_all_started_fmt, this->id);
 
-  // ------------ do robbery ----------------------------
-  // printf("DEBUG: DO BANCK ROBBERY\n");
-  // bank_robbery(this, this->num_of_processes - 1); // do robbery
-
-  // ------------ lamport_send for all STOP message -------------
-  Message msg;
-  create_message(&msg, STOP, NULL, 0);
-
-  if (lamport_send_multicast(this, &msg) != 0) {
-    printf("Fail to do multicast STOP request from process parent %i\n",
-           this->id);
-    return 1;
-  }
   // ----------- wait for DONE messages from all -------
   if (wait_for_all(this, DONE) != 0) {
     printf("Fail to lamport_receive all DONE messages %i\n", this->id);
@@ -184,16 +181,18 @@ int main(int argc, const char *argv[]) {
     return -1;
   }
 
-  if (strcmp(argv[1], "--mutexl") == 0) {
-    critical = true;
-  }
-
   local_id total_N = 0;
-  if (strcmp(argv[1], "-p") == 0) {
-    total_N = atoi(argv[2]) + 1;
-    if (total_N > 10 || total_N < 1) {
-      printf("Num of processes has to be from 1 to 10\n");
-      return -1;
+  for (int i = 1; i < argc; i++){
+    if (strcmp(argv[i], "--mutexl") == 0) {
+      critical = true;
+    }
+
+    if (strcmp(argv[i], "-p") == 0 && i != argc - 1) {
+      total_N = atoi(argv[i + 1]) + 1;
+      if (total_N > 10 || total_N < 1) {
+        printf("Num of processes has to be from 1 to 10\n");
+        return -1;
+      }
     }
   }
 
