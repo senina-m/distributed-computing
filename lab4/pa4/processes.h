@@ -6,7 +6,14 @@
 #include <stdio.h> 
 #include <sys/types.h>
 #include <unistd.h>
+#include <stdbool.h>
 
+#define logger(file, str, ...)                                                 \
+  {                                                                            \
+    timestamp_t time = get_lamport_time();                                     \
+    fprintf(file, str, time, __VA_ARGS__);                                     \
+    printf(str, time, __VA_ARGS__);                                            \
+  }
 
 typedef struct{
     int fw;
@@ -27,6 +34,7 @@ typedef struct{
     Pipe*** pipes;
     Log* log;
     balance_t balance;
+    bool is_cs;
 } Process;
 
 #endif // __IFMO_DISTRIBUTED_CLASS_PROCESSES__H

@@ -5,21 +5,13 @@
 #include <sys/wait.h>
 #include <time.h>
 
-#include "banking.h"
 #include "common.h"
+#include "cs.h"
 #include "ipc.h"
 #include "pa2345.h"
 #include "pipes.h"
-#include "lamport.h"
 
 #define BUF_SIZE 1024
-
-#define logger(file, str, ...)                                                 \
-  {                                                                            \
-    timestamp_t time = get_lamport_time();                                    \
-    fprintf(file, str, time, __VA_ARGS__);                                     \
-    printf(str, time, __VA_ARGS__);                                            \
-  }
 
 void free_process(Process *ptr) {
   free_pipes(ptr->pipes, ptr->num_of_processes);
@@ -60,18 +52,22 @@ int wait_for_all(Process *this, MessageType t) {
 int blocked_wait_for_all(Process *this, MessageType t) {
   Message msg;
   int n = this->num_of_processes;
-  local_id id = 1; //because parent doesn't lamport_send anything
-  while(id < n){
-      if(id == this->id) id++;
-      else{
-          if(lamport_receive(this, id, &msg) == 0){
-              // printf("Process %i received message \'%s\'\n", this->id, msg.s_payload);
-              if(msg.s_header.s_type == t) id++;
-          }else{
-              printf("Can't receive STARTED messages from process %i in process %i\n", id, this->id);
-              return 1;
-          }
+  local_id id = 1; // because parent doesn't lamport_send anything
+  while (id < n) {
+    if (id == this->id)
+      id++;
+    else {
+      if (lamport_receive(this, id, &msg) == 0) {
+        // printf("Process %i received message \'%s\'\n", this->id,
+        // msg.s_payload);
+        if (msg.s_header.s_type == t)
+          id++;
+      } else {
+        printf("Can't receive STARTED messages from process %i in process %i\n",
+               id, this->id);
+        return 1;
       }
+    }
   }
   return 0;
 }
@@ -95,17 +91,20 @@ int wait_for_history(Process *this, AllHistory *all_history) {
   return 0;
 }
 
-void print_h(local_id id, BalanceState* history, uint8_t len) {
-  printf("DEBUG %i: HISTORY time=%i, balance=%i pending=%i\n", 
-  id, history[len].s_time, history[len].s_balance, history[len].s_balance_pending_in);
+void print_h(local_id id, BalanceState *history, uint8_t len) {
+  printf("DEBUG %i: HISTORY time=%i, balance=%i pending=%i\n", id,
+         history[len].s_time, history[len].s_balance,
+         history[len].s_balance_pending_in);
 }
 
 void fill_balance_history(BalanceState history[], uint8_t *len,
-                          timestamp_t time, balance_t balance, balance_t pending) {
+                          timestamp_t time, balance_t balance,
+                          balance_t pending) {
   balance_t current_bal = history[*len].s_balance;
   balance_t current_pen = history[*len].s_balance_pending_in;
-  // printf("DEBUG: current_bal=%i, time=%i, balance=%i, len=%i\n", current_bal, time, balance, *len);
-  
+  // printf("DEBUG: current_bal=%i, time=%i, balance=%i, len=%i\n", current_bal,
+  // time, balance, *len);
+
   for (uint8_t i = *len + 1; i < time; i++) {
     history[i].s_balance_pending_in = current_pen;
     history[i].s_time = i;
@@ -114,18 +113,20 @@ void fill_balance_history(BalanceState history[], uint8_t *len,
   history[time].s_balance = balance;
   history[time].s_time = time;
   // printf("DEBUG: %i=cur_pend %i=new_pend\n", current_pen, pending);
-  history[time].s_balance_pending_in = current_pen +  pending;
+  history[time].s_balance_pending_in = current_pen + pending;
   *len = time;
 }
 
-void change_balance(Process* this, BalanceState* history, uint8_t* len, balance_t amount){
+void change_balance(Process *this, BalanceState *history, uint8_t *len,
+                    balance_t amount) {
   timestamp_t now = get_lamport_time();
   this->balance += amount;
   // balance_t pending = amount > 0? 0 : -amount;
   balance_t pending = -amount;
   fill_balance_history(history, len, now, this->balance, pending);
   // print_h(this->id, history, *len);
-  // printf("DEBUG %i: send ACK that I received amount=%i from=%i\n", this->id, order->s_amount, order->s_src);
+  // printf("DEBUG %i: send ACK that I received amount=%i from=%i\n", this->id,
+  // order->s_amount, order->s_src);
 }
 
 int run_child_rutine(Process *this) {
@@ -214,7 +215,8 @@ int run_child_rutine(Process *this) {
         printf("Too late to transfer message to src child %d\n", this->id);
       } else if (order->s_dst == this->id) {
         change_balance(this, history, &history_len, order->s_amount);
-        logger(this->log->processes, log_transfer_in_fmt, this->id, order->s_amount, order->s_src);
+        logger(this->log->processes, log_transfer_in_fmt, this->id,
+               order->s_amount, order->s_src);
         Message ack;
         create_message(&ack, ACK, NULL, 0);
         lamport_send(this, 0, &ack);
@@ -233,7 +235,8 @@ int run_child_rutine(Process *this) {
   }
 
   logger(this->log->processes, log_received_all_done_fmt, this->id);
-  fill_balance_history(history, &history_len, get_lamport_time(), this->balance, 0);
+  fill_balance_history(history, &history_len, get_lamport_time(), this->balance,
+                       0);
   history_len++;
   size_t s_history_len = sizeof(BalanceState) * history_len;
   BalanceHistory b_history;
@@ -288,7 +291,7 @@ int run_parent_rutine(Process *this) {
     logger(this->log->processes, log_received_all_done_fmt, this->id);
   //------------ collect BALANCE_HISTORY ---------------
 
-  AllHistory *all_history = (AllHistory*)malloc(sizeof(AllHistory));
+  AllHistory *all_history = (AllHistory *)malloc(sizeof(AllHistory));
   if (wait_for_history(this, all_history) != 0) {
     printf("Fail to receive BALANCE_HISTORY from all clients %i\n", this->id);
     return 1;
@@ -331,7 +334,8 @@ void transfer(void *parent_data, local_id src, local_id dst, balance_t amount) {
   order.s_dst = dst;
   order.s_amount = amount;
   create_message(&msg, TRANSFER, &order, sizeof(TransferOrder));
-  // printf("DEBUG %i: sent TRANSFER from %i to %i amount=%i \n", this->id, src, dst, amount);
+  // printf("DEBUG %i: sent TRANSFER from %i to %i amount=%i \n", this->id, src,
+  // dst, amount);
   lamport_send(this, src, &msg);
 
   // ----------- listen for ASK -----------------------
@@ -347,6 +351,11 @@ int main(int argc, const char *argv[]) {
   if (argc < 3) {
     printf("Invalid amount of arguments = %i\n", argc);
     return -1;
+  }
+
+  bool critical;
+  if (strcmp(argv[1], "--mutexl") == 0) {
+    critical = true;
   }
 
   local_id total_N = 0;
@@ -380,6 +389,7 @@ int main(int argc, const char *argv[]) {
   this->log->pipes = fopen(pipes_log, "w");
   this->pipes = alloc_pipes(total_N);
   this->balance = -1;
+  this->is_cs = critical;
 
   if (init_pipes(this))
     return -1;
@@ -392,7 +402,7 @@ int main(int argc, const char *argv[]) {
       this->pid = getpid();
       this->id = i;
       this->balance = balances[i - 1];
-
+      this->is_cs = critical;
       break;
     }
   }
