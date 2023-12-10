@@ -5,12 +5,13 @@
 #include <sys/wait.h>
 #include <time.h>
 
-#include "banking.h"
 #include "common.h"
 #include "ipc.h"
 #include "pa2345.h"
 #include "pipes.h"
 #include "lamport.h"
+
+bool critical = false;
 
 #define logger(file, str, ...)                                                 \
   {                                                                            \
@@ -28,8 +29,6 @@ void free_process(Process *ptr) {
 int wait_for_all(Process *this, MessageType t) {
   Message msg;
   int amount = 0;
-  // if it's parent proc we need to wait n-1, if it's client proc we need to
-  // wait n-2;
   int n = this->num_of_processes - ((this->id == 0) ? 1 : 2);
   while (amount < n) {
     if (lamport_receive_any(this, &msg) == 0) {
@@ -84,26 +83,25 @@ int run_child_rutine(Process *this) {
   } else
     logger(this->log->processes, log_received_all_started_fmt, this->id);
 
-  // 3. Ждет от них ответа (ok)
-// 4. Получив все ответы, ждет, когда он станет первым в своей очереди, и входит в критическую секцию
+  for (int i = 1; i <= this->id * 5; i++){
+		if (critical){
+			request_cs(this);
+		}
+		
+    printf("DEBUG %i: In CS\n", this->id);
 
-  Message receive_msg;
-  bool is_waiting = true;
-  TransferOrder *order;
-  while (is_waiting) {
-    // printf("DEBUG %i: try to receive some msg\n", this->id);
-    lamport_receive_any(this, &receive_msg);
-    switch (receive_msg.s_header.s_type) {
-    case STOP:
-      // printf("DEBUG %i: receive STOP\n", this->id);
-      is_waiting = false;
-      break;
-    default:
-      printf("Non expected type of message receive %d in clid %d\n",
-             msg.s_header.s_type, this->id);
-      break;
-    }
-  }
+    char buffer[MAX_PAYLOAD_LEN];
+		snprintf(buffer, MAX_PAYLOAD_LEN, log_loop_operation_fmt, this->id, i, this->id * 5);
+    logger(this->log->processes, log_loop_operation_fmt, this->id, this->id * 5);
+		print(buffer);
+		
+		/* If "--mutexl" is set, notify all about exiting critical area */
+		if (critical){
+			release_cs(this);
+		}
+
+    printf("DEBUG %i: Out of CS\n", this->id);
+	}
 
   logger(this->log->processes, log_done_fmt, this->id, 0);
 
@@ -115,20 +113,10 @@ int run_child_rutine(Process *this) {
     return 1;
   }
 
-  int count = this->num_of_processes - 2;
-  while (count > 0) {
-    lamport_receive_any(this, &msg);
-    switch (msg.s_header.s_type) {
-    case DONE:
-      count--;
-      break;
-    default:
-      printf("Non expected type of message receive %d\n", msg.s_header.s_type);
-      break;
-    }
-  }
-
-  logger(this->log->processes, log_received_all_done_fmt, this->id);
+  if(wait_for_all(this, DONE) != 0){
+    printf("Fail to receive all DONE messages %i\n", this->id);
+    return 1;
+  }else logger(this->log->processes, log_received_all_done_fmt, this->id);
 
   if (close_used_pipes(this) != 0) {
     printf("Fail to close used pipes %i\n", this->id);
@@ -190,31 +178,14 @@ int run_parent_rutine(Process *this) {
   return 0;
 }
 
-void transfer(void *parent_data, local_id src, local_id dst, balance_t amount) {
-  Process *this = (Process *)parent_data;
-  // ----------- lamport_send transfer request ----------------
-  Message msg;
-  TransferOrder order;
-  order.s_src = src;
-  order.s_dst = dst;
-  order.s_amount = amount;
-  create_message(&msg, TRANSFER, &order, sizeof(TransferOrder));
-  // printf("DEBUG %i: sent TRANSFER from %i to %i amount=%i \n", this->id, src, dst, amount);
-  lamport_send(this, src, &msg);
-
-  // ----------- listen for ASK -----------------------
-  lamport_receive(this, dst, &msg);
-  if (msg.s_header.s_type == ACK) {
-    // printf("DEBUG %i: lamport_receive ACK from %i\n", this->id, dst);
-  } else {
-    printf("ERROR resciving ASK from client %i", dst);
-  }
-}
-
 int main(int argc, const char *argv[]) {
   if (argc < 3) {
     printf("Invalid amount of arguments = %i\n", argc);
     return -1;
+  }
+
+  if (strcmp(argv[1], "--mutexl") == 0) {
+    critical = true;
   }
 
   local_id total_N = 0;
@@ -248,7 +219,6 @@ int main(int argc, const char *argv[]) {
       this->parent_pid = my_parent_pid;
       this->pid = getpid();
       this->id = i;
-
       break;
     }
   }

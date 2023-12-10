@@ -1,8 +1,8 @@
 #ifndef __IFMO_DISTRIBUTED_CLASS_LAMPORT_TIME__H
 #define __IFMO_DISTRIBUTED_CLASS_LAMPORT_TIME__H
 
-#include "banking.h"
 #include "processes.h"
+#include <string.h>
 
 timestamp_t get_lamport_time();
 
