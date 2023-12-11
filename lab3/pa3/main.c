@@ -6,12 +6,19 @@
 #include <time.h>
 
 #include "common.h"
-#include "cs.h"
+#include "lamport.h"
 #include "ipc.h"
 #include "pa2345.h"
 #include "pipes.h"
 
 #define BUF_SIZE 1024
+
+#define logger(file, str, ...)                                                 \
+  {                                                                            \
+    timestamp_t time = get_lamport_time();                                     \
+    fprintf(file, str, time, __VA_ARGS__);                                     \
+    printf(str, time, __VA_ARGS__);                                            \
+  }
 
 void free_process(Process *ptr) {
   free_pipes(ptr->pipes, ptr->num_of_processes);
@@ -353,11 +360,6 @@ int main(int argc, const char *argv[]) {
     return -1;
   }
 
-  bool critical;
-  if (strcmp(argv[1], "--mutexl") == 0) {
-    critical = true;
-  }
-
   local_id total_N = 0;
   if (strcmp(argv[1], "-p") == 0) {
     total_N = atoi(argv[2]) + 1;
@@ -389,7 +391,6 @@ int main(int argc, const char *argv[]) {
   this->log->pipes = fopen(pipes_log, "w");
   this->pipes = alloc_pipes(total_N);
   this->balance = -1;
-  this->is_cs = critical;
 
   if (init_pipes(this))
     return -1;
@@ -402,7 +403,6 @@ int main(int argc, const char *argv[]) {
       this->pid = getpid();
       this->id = i;
       this->balance = balances[i - 1];
-      this->is_cs = critical;
       break;
     }
   }

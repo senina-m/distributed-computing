@@ -6,7 +6,7 @@
 int send(void *self, local_id dst, const Message *msg) {
   Process *this = (Process *)self;
   local_id src = this->id;
-  size_t msg_len = sizeof(MessageHeader) + msg->s_header.s_payload_len;
+  ssize_t msg_len = sizeof(MessageHeader) + msg->s_header.s_payload_len;
   ssize_t ret = write(this->pipes[dst][src]->fw, msg, msg_len);
   if (ret == msg_len) {
     // printf("Send message successfull from %d pipe to %d: %s\n", src, dst,
@@ -37,7 +37,7 @@ int receive(void *self, local_id from, Message *msg) {
   Process *this = (Process *)self;
   int listened_pipe = this->pipes[this->id][from]->fr;
   uint8_t is_read_header = 0;
-  size_t bytes_to_read = sizeof(MessageHeader);
+  ssize_t bytes_to_read = sizeof(MessageHeader);
   while (1) {
     ssize_t read_count = 0;
     if (!is_read_header) {
@@ -84,7 +84,7 @@ int receive_any(void *self, Message *msg) {
   uint8_t is_chose_pipe = 0;
   uint8_t is_read_header = 0;
   local_id from = -1;
-  size_t bytes_to_read = sizeof(MessageHeader);
+  ssize_t bytes_to_read = sizeof(MessageHeader);
   while (1) {
     // printf("DEBUG %i: try to read_any\n", this->id);
     ssize_t read_count = 0;
@@ -120,8 +120,7 @@ int receive_any(void *self, Message *msg) {
     if (is_chose_pipe && !is_read_header) {
       // printf("DEBUG %i: read choose pipe and didn't finished read\n", this->id);
       read_count = read(this->pipes[this->id][from]->fr,
-                        &msg->s_header + sizeof(MessageHeader) - bytes_to_read,
-                        bytes_to_read);
+                        &msg->s_header + sizeof(MessageHeader) - bytes_to_read, bytes_to_read);
       if (read_count == bytes_to_read) {
         // printf("DEBUG %i: finished reading header\n", this->id);
         is_read_header = 1;

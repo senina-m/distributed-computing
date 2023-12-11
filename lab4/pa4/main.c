@@ -16,9 +16,8 @@ bool critical = false;
 
 #define logger(file, str, ...)                                                 \
   {                                                                            \
-    timestamp_t time = get_lamport_time();                                    \
-    fprintf(file, str, time, __VA_ARGS__);                                     \
-    printf(str, time, __VA_ARGS__);                                            \
+    fprintf(file, str, __VA_ARGS__);                                     \
+    printf(str, __VA_ARGS__);                                            \
   }
 
 void free_process(Process *ptr) {
@@ -34,7 +33,7 @@ int wait_for_all(Process *this, MessageType t) {
   while (amount < n) {
     if (lamport_receive_any(this, &msg) == 0) {
       // printf("DEBUG %i: go msg %i\n", this->id, msg.s_header.s_type);
-      if (msg.s_header.s_type == t)
+      if (msg.s_header.s_type == (int16_t)t)
         amount++;
       // printf("DEBUG %i: amount %i\n", this->id, amount);
     } else {
@@ -54,7 +53,7 @@ int blocked_wait_for_all(Process *this, MessageType t) {
       else{
           if(lamport_receive(this, id, &msg) == 0){
               // printf("Process %i received message \'%s\'\n", this->id, msg.s_payload);
-              if(msg.s_header.s_type == t) id++;
+              if(msg.s_header.s_type == (short)t) id++;
           }else{
               printf("Can't receive STARTED messages from process %i in process %i\n", id, this->id);
               return 1;
@@ -67,11 +66,11 @@ int blocked_wait_for_all(Process *this, MessageType t) {
 
 int run_child_rutine(Process *this) {
   // START section
-  logger(this->log->processes, log_started_fmt, this->id, this->pid,
+  logger(this->log->processes, log_started_fmt, get_lamport_time(), this->id, this->pid,
          this->parent_pid, 0);
 
   Message msg;
-  create_message(&msg, STARTED, NULL, 0);
+  create_message(&msg, STARTED, &msg, 0);
 
   if (lamport_send_multicast(this, &msg) != 0) {
     printf("Fail to do multicast STARTED request from process %i\n", this->id);
@@ -82,10 +81,12 @@ int run_child_rutine(Process *this) {
     printf("Fail to receive all STARTED messages in child %i\n", this->id);
     return 1;
   } else
-    logger(this->log->processes, log_received_all_started_fmt, this->id);
+    logger(this->log->processes, log_received_all_started_fmt, get_lamport_time(), this->id);
 
   printf("DEBUG %i: CHILD Start doing real work\n", this->id);
-  for (int i = 1; i <= this->id * 5; i++){
+
+  int iterations = 1;
+  for (int i = 1; i <= this->id * iterations; i++){
 		if (critical){
 			request_cs(this);
 		}
@@ -93,8 +94,8 @@ int run_child_rutine(Process *this) {
     printf("DEBUG %i: In CS\n", this->id);
 
     char buffer[MAX_PAYLOAD_LEN];
-		snprintf(buffer, MAX_PAYLOAD_LEN, log_loop_operation_fmt, this->id, i, this->id * 5);
-    logger(this->log->processes, log_loop_operation_fmt, this->id, this->id * 5);
+		snprintf(buffer, MAX_PAYLOAD_LEN, log_loop_operation_fmt, this->id, i, this->id * iterations);
+    logger(this->log->processes, log_loop_operation_fmt, this->id, i, this->id * iterations);
 		print(buffer);
 		
 		/* If "--mutexl" is set, notify all about exiting critical area */
@@ -104,11 +105,11 @@ int run_child_rutine(Process *this) {
 
     printf("DEBUG %i: Out of CS\n", this->id);
 	}
-  printf("DEBUG %i: CLILD done with his real work\n", this->id);
+  printf("DEBUG %i: CHILD done with his real work\n", this->id);
 
-  logger(this->log->processes, log_done_fmt, this->id, 0);
+  logger(this->log->processes, log_done_fmt, get_lamport_time(), this->id, 0);
 
-  create_message(&msg, DONE, NULL, 0);
+  create_message(&msg, DONE, &msg, 0);
 
   if (lamport_send_multicast(this, &msg) != 0) {
     printf("Fail to do multicast DONE request from process %i in clid %d\n",
@@ -116,17 +117,16 @@ int run_child_rutine(Process *this) {
     return 1;
   }
 
-  int amount = this->num_of_processes;
-  while (amount > 0){
+  while (this->done < this->num_of_processes - 2){
 		while (lamport_receive_any(this, &msg)) continue;
     if(msg.s_header.s_type == DONE){
-      amount--;
+      this->done++;
     }else if (msg.s_header.s_type == CS_REQUEST){
       manage_request(this, &msg);
     }
 	}
 
-  logger(this->log->processes, log_received_all_done_fmt, this->id);
+  logger(this->log->processes, log_received_all_done_fmt, get_lamport_time(), this->id);
 
   if (close_used_pipes(this) != 0) {
     printf("Fail to close used pipes %i\n", this->id);
@@ -146,14 +146,14 @@ int run_parent_rutine(Process *this) {
     printf("Fail to receive all STARTED messages in parent %i\n", this->id);
     return 1;
   } else
-    logger(this->log->processes, log_received_all_started_fmt, this->id);
+    logger(this->log->processes, log_received_all_started_fmt, get_lamport_time(), this->id);
 
   // ----------- wait for DONE messages from all -------
   if (wait_for_all(this, DONE) != 0) {
     printf("Fail to lamport_receive all DONE messages %i\n", this->id);
     return 1;
   } else
-    logger(this->log->processes, log_received_all_done_fmt, this->id);
+    logger(this->log->processes, log_received_all_done_fmt, get_lamport_time(), this->id);
 
   // ----------- close all processes ------------------
 
@@ -207,6 +207,7 @@ int main(int argc, const char *argv[]) {
   this->log->processes = fopen(events_log, "a");
   this->log->pipes = fopen(pipes_log, "w");
   this->pipes = alloc_pipes(total_N);
+  this->done = 0;
 
   if (init_pipes(this))
     return -1;

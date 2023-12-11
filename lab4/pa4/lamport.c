@@ -1,6 +1,17 @@
 
 #include "lamport.h"
 
+void print_msg(Process* this, Message* msg){
+    if (msg->s_header.s_payload_len > 0)
+    printf("DEBUG %i: Header: magic=%i, len=%i, type=%i, time=%i, content=%s\n", 
+    this->id, msg->s_header.s_magic, msg->s_header.s_payload_len, msg->s_header.s_type, 
+    msg->s_header.s_local_time, msg->s_payload);
+
+    else printf("DEBUG %i: Header: magic=%i, len=%i, type=%i, time=%i, no content\n", 
+    this->id, msg->s_header.s_magic, msg->s_header.s_payload_len, msg->s_header.s_type, 
+    msg->s_header.s_local_time);
+}
+
 timestamp_t now_time = 0;
 
 timestamp_t get_lamport_time(){
@@ -36,7 +47,6 @@ int lamport_receive(Process*this, local_id from, Message *msg) {
 }
 
 int lamport_receive_any(Process*this, Message *msg) {
-
     int ret = receive_any(this, msg);
     msg->s_header.s_local_time = update_lamport_time(msg->s_header.s_local_time);
     return ret;
@@ -44,11 +54,11 @@ int lamport_receive_any(Process*this, Message *msg) {
 }
 
 void create_message(Message *msg, MessageType type, void *contens, int len) {
-  msg->s_header.s_type = type;
-  msg->s_header.s_magic = MESSAGE_MAGIC;
-  msg->s_header.s_local_time = -1;
-  if (contens != NULL) {
-    memcpy(msg->s_payload, contens, len);
+    msg->s_header.s_type = type;
+    msg->s_header.s_magic = MESSAGE_MAGIC;
+    msg->s_header.s_local_time = -1;
     msg->s_header.s_payload_len = len;
-  }
+    if (len > 0) {
+        memcpy(msg->s_payload, contens, len);
+    }
 }

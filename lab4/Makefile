@@ -1,4 +1,4 @@
-CFLAGS=--std=c17 -Wall -pedantic -Isrc/ -ggdb -Wextra -Werror -DDEBUG
+CFLAGS=--std=c17 -Wall -pedantic -Isrc/ -ggdb -Wextra  -DDEBUG -g -fsanitize=address #-Werror
 BUILDDIR=build
 SRCDIR=pa4
 CC=clang
@@ -8,7 +8,9 @@ CC=clang
 LD_PRELOAD=/home/marsen/itmo/distributed_computing/lab4/pa4/lib64/libruntime.so ./build/pa4 -p
 
 main: build
-	$(CC) -L./pa4/lib64/ -lruntime -fsanitize=address -std=c99 -Wall -pedantic $(SRCDIR)/main.c $(SRCDIR)/pipes.c $(SRCDIR)/ipc.c $(SRCDIR)/lamport.c $(SRCDIR)/cs.c $(SRCDIR)/queue.c -o $(BUILDDIR)/pa4 
+	$(CC) -L./pa4/lib64/ -lruntime $(CFLAGS) -std=c99 -Wall -pedantic $(SRCDIR)/main.c $(SRCDIR)/pipes.c $(SRCDIR)/ipc.c \
+																	  $(SRCDIR)/lamport.c $(SRCDIR)/cs.c $(SRCDIR)/queue.c \
+																	  -o $(BUILDDIR)/pa4 
 
 build: clean
 	mkdir -p $(BUILDDIR)
