@@ -1,17 +1,6 @@
 
 #include "lamport.h"
 
-// void print_msg(Process* this, Message* msg){
-    // if (msg->s_header.s_payload_len > 0)
-    // printf("DEBUG %i: Header: magic=%i, len=%i, type=%i, time=%i, content=%s\n", 
-    // this->id, msg->s_header.s_magic, msg->s_header.s_payload_len, msg->s_header.s_type, 
-    // msg->s_header.s_local_time, msg->s_payload);
-
-    // else // printf("DEBUG %i: Header: magic=%i, len=%i, type=%i, time=%i, no content\n", 
-//     this->id, msg->s_header.s_magic, msg->s_header.s_payload_len, msg->s_header.s_type, 
-//     msg->s_header.s_local_time);
-// }
-
 timestamp_t now_time = 0;
 
 timestamp_t get_lamport_time(){
