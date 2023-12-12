@@ -14,7 +14,7 @@ Pipe*** alloc_pipes(int n);
 
 int init_pipes(Process* this);
 
-void free_pipes(Pipe*** ptr, int n);
+void free_pipes(Pipe*** pipes, int n);
 
 int close_unused_pipes(Process* this);
 

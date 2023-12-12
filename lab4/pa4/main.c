@@ -32,13 +32,10 @@ int wait_for_all(Process *this, MessageType t) {
   int n = this->num_of_processes - ((this->id == 0) ? 1 : 2);
   while (amount < n) {
     if (lamport_receive_any(this, &msg) == 0) {
-      // printf("DEBUG %i: go msg %i\n", this->id, msg.s_header.s_type);
       if (msg.s_header.s_type == (int16_t)t)
         amount++;
-      // printf("DEBUG %i: amount %i\n", this->id, amount);
     } else {
       printf("Fail to recive message in process %i (wait_for_all)\n", this->id);
-      // return 1;
     }
   }
   return 0;
@@ -83,9 +80,7 @@ int run_child_rutine(Process *this) {
   } else
     logger(this->log->processes, log_received_all_started_fmt, get_lamport_time(), this->id);
 
-  printf("DEBUG %i: CHILD Start doing real work\n", this->id);
-
-  int iterations = 1;
+  int iterations = 5;
   for (int i = 1; i <= this->id * iterations; i++){
 		if (critical){
 			request_cs(this);
@@ -105,7 +100,6 @@ int run_child_rutine(Process *this) {
 
     printf("DEBUG %i: Out of CS\n", this->id);
 	}
-  printf("DEBUG %i: CHILD done with his real work\n", this->id);
 
   logger(this->log->processes, log_done_fmt, get_lamport_time(), this->id, 0);
 
@@ -118,13 +112,8 @@ int run_child_rutine(Process *this) {
   }
 
   while (this->done < this->num_of_processes - 2){
-		while (lamport_receive_any(this, &msg)) continue;
-    if(msg.s_header.s_type == DONE){
-      this->done++;
-    }else if (msg.s_header.s_type == CS_REQUEST){
-      manage_request(this, &msg);
-    }
-	}
+		manage_CS(this);
+  }
 
   logger(this->log->processes, log_received_all_done_fmt, get_lamport_time(), this->id);
 
@@ -211,7 +200,8 @@ int main(int argc, const char *argv[]) {
 
   if (init_pipes(this))
     return -1;
-
+  fflush(this->log->pipes);
+  
   pid_t my_parent_pid = this->pid;
   for (int i = 1; i < this->num_of_processes; i++) {
     if (fork() == 0) {

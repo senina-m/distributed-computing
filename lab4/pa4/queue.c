@@ -72,34 +72,37 @@ void queue_drop_by_id(local_id proc_id){
   queue.len = queue.len - 1;
 }
 
-int wait_cs(Process *this) {
+int manage_CS(Process* this){
   Message msg;
-  // пока мы не на вершине очереди -- ждём ответов других
+  if (lamport_receive_any(this, &msg) == 0) {
+      // При получении запроса от другого потока, запрос добавляется в очередь и запрашивающему потоку посылается ответ
+      if (msg.s_header.s_type == CS_REQUEST) {
+          manage_request(this, &msg);
+      } else if (msg.s_header.s_type == CS_REPLY) {
+          printf("DEBUG %i: got CS_REPLY\n", this->id);
+          return 1;
+      // При получении release от другого потока, его запрос удаляется из очереди
+      } else if (msg.s_header.s_type == CS_RELEASE){
+          local_id proc_id = *msg.s_payload;
+          printf("DEBUG %i: got CS_RELEASE from %i\n", this->id, proc_id);
+          queue_drop_by_id(proc_id);
+          print_queue(this->id);
+      } else if (msg.s_header.s_type == DONE){
+        this->done++;
+        printf("DEBUG %i: got DONE %i\n", this->id, this->done);
+      }
+  }
+  return 0;
+}
 
+int wait_cs(Process *this) {
+  // пока мы не на вершине очереди -- ждём ответов других
     int replies = 0;
     while (queue.nodes[0].id != this->id ||
             replies != this->num_of_processes - 2) {
-        printf("DEBUG %i: node first=%i replies=%i\n", this->id,
-            queue.nodes[0].id != this->id, replies);
-        if (lamport_receive_any(this, &msg) == 0) {
-            // При получении запроса от другого потока, запрос добавляется в очередь и запрашивающему потоку посылается ответ
-            if (msg.s_header.s_type == CS_REQUEST) {
-                manage_request(this, &msg);
-            } else if (msg.s_header.s_type == CS_REPLY) {
-                printf("DEBUG %i: got CS_REPLY\n", this->id);
-                replies++;
-            // При получении release от другого потока, его запрос удаляется из очереди
-            } else if (msg.s_header.s_type == CS_RELEASE){
-                local_id proc_id = *msg.s_payload;
-                printf("DEBUG %i: got CS_RELEASE from %i\n", this->id, proc_id);
-                queue_drop_by_id(proc_id);
-                print_queue(this->id);
-            } else if (msg.s_header.s_type == DONE){
-              this->done++;
-              printf("DEBUG %i: done %i\n", this->id, this->done);
-            }
-        }
+        // printf("DEBUG %i: node first=%i replies=%i\n", this->id,
+            // queue.nodes[0].id != this->id, replies);
+        replies += manage_CS(this);
     }
-    printf("DEBUG %i: READY TO GO TO CS\n", this->id);
     return 0;
 }

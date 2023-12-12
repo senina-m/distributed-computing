@@ -13,11 +13,14 @@ Pipe*** alloc_pipes(int n){
     return pipes;
 }
 
-void free_pipes(Pipe*** ptr, int n){
+void free_pipes(Pipe*** pipes, int n){
     for (int i = 0; i < n; i++){
-        free(ptr[i]);
+        for(int j = 0; j < n; j++){
+            free(pipes[i][j]);
+        }
+        free(pipes[i]);
     }
-    free(ptr);
+    free(pipes);
 }
 
 int init_pipes(Process* this){

@@ -16,5 +16,4 @@ int lamport_receive(Process* this, local_id from, Message * msg);
 int lamport_receive_any(Process* this, Message * msg);
 
 void create_message(Message *msg, MessageType type, void *contens, int len);
-void print_msg(Process* this, Message* msg);
 #endif

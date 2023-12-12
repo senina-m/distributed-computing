@@ -383,6 +383,8 @@ int main(int argc, const char *argv[]) {
 
   if (init_pipes(this))
     return -1;
+  fflush(this->log->pipes);
+
 
   pid_t my_parent_pid = this->pid;
   for (int i = 1; i < this->num_of_processes; i++) {

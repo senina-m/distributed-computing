@@ -5,17 +5,18 @@
 #include <sys/wait.h>
 #include <time.h>
 
+#include "banking.h"
 #include "common.h"
-#include "lamport.h"
 #include "ipc.h"
 #include "pa2345.h"
 #include "pipes.h"
+#include "lamport.h"
 
 #define BUF_SIZE 1024
 
 #define logger(file, str, ...)                                                 \
   {                                                                            \
-    timestamp_t time = get_lamport_time();                                     \
+    timestamp_t time = get_lamport_time();                                    \
     fprintf(file, str, time, __VA_ARGS__);                                     \
     printf(str, time, __VA_ARGS__);                                            \
   }
@@ -30,9 +31,9 @@ void create_message(Message *msg, MessageType type, void *contens, int len) {
   msg->s_header.s_type = type;
   msg->s_header.s_magic = MESSAGE_MAGIC;
   msg->s_header.s_local_time = -1;
-  if (contens != NULL) {
+  msg->s_header.s_payload_len = len;
+  if (len > 0 ) {
     memcpy(msg->s_payload, contens, len);
-    msg->s_header.s_payload_len = len;
   }
 }
 
@@ -59,22 +60,18 @@ int wait_for_all(Process *this, MessageType t) {
 int blocked_wait_for_all(Process *this, MessageType t) {
   Message msg;
   int n = this->num_of_processes;
-  local_id id = 1; // because parent doesn't lamport_send anything
-  while (id < n) {
-    if (id == this->id)
-      id++;
-    else {
-      if (lamport_receive(this, id, &msg) == 0) {
-        // printf("Process %i received message \'%s\'\n", this->id,
-        // msg.s_payload);
-        if (msg.s_header.s_type == t)
-          id++;
-      } else {
-        printf("Can't receive STARTED messages from process %i in process %i\n",
-               id, this->id);
-        return 1;
+  local_id id = 1; //because parent doesn't lamport_send anything
+  while(id < n){
+      if(id == this->id) id++;
+      else{
+          if(lamport_receive(this, id, &msg) == 0){
+              // printf("Process %i received message \'%s\'\n", this->id, msg.s_payload);
+              if(msg.s_header.s_type == t) id++;
+          }else{
+              printf("Can't receive STARTED messages from process %i in process %i\n", id, this->id);
+              return 1;
+          }
       }
-    }
   }
   return 0;
 }
@@ -86,7 +83,7 @@ int wait_for_history(Process *this, AllHistory *all_history) {
     if (lamport_receive_any(this, &msg) == 0) {
       if (msg.s_header.s_type == BALANCE_HISTORY) {
         BalanceHistory history;
-        memcpy(&history, &(msg.s_payload), sizeof(msg.s_payload));
+        memcpy(&history, &(msg.s_payload), msg.s_header.s_payload_len);
         all_history->s_history[history.s_id - 1] = history;
         all_history->s_history_len++;
       }
@@ -98,20 +95,17 @@ int wait_for_history(Process *this, AllHistory *all_history) {
   return 0;
 }
 
-void print_h(local_id id, BalanceState *history, uint8_t len) {
-  printf("DEBUG %i: HISTORY time=%i, balance=%i pending=%i\n", id,
-         history[len].s_time, history[len].s_balance,
-         history[len].s_balance_pending_in);
+void print_h(local_id id, BalanceState* history, uint8_t len) {
+  printf("DEBUG %i: HISTORY time=%i, balance=%i pending=%i\n", 
+  id, history[len].s_time, history[len].s_balance, history[len].s_balance_pending_in);
 }
 
 void fill_balance_history(BalanceState history[], uint8_t *len,
-                          timestamp_t time, balance_t balance,
-                          balance_t pending) {
+                          timestamp_t time, balance_t balance, balance_t pending) {
   balance_t current_bal = history[*len].s_balance;
   balance_t current_pen = history[*len].s_balance_pending_in;
-  // printf("DEBUG: current_bal=%i, time=%i, balance=%i, len=%i\n", current_bal,
-  // time, balance, *len);
-
+  // printf("DEBUG: current_bal=%i, time=%i, balance=%i, len=%i\n", current_bal, time, balance, *len);
+  
   for (uint8_t i = *len + 1; i < time; i++) {
     history[i].s_balance_pending_in = current_pen;
     history[i].s_time = i;
@@ -120,20 +114,18 @@ void fill_balance_history(BalanceState history[], uint8_t *len,
   history[time].s_balance = balance;
   history[time].s_time = time;
   // printf("DEBUG: %i=cur_pend %i=new_pend\n", current_pen, pending);
-  history[time].s_balance_pending_in = current_pen + pending;
+  history[time].s_balance_pending_in = current_pen +  pending;
   *len = time;
 }
 
-void change_balance(Process *this, BalanceState *history, uint8_t *len,
-                    balance_t amount) {
+void change_balance(Process* this, BalanceState* history, uint8_t* len, balance_t amount){
   timestamp_t now = get_lamport_time();
   this->balance += amount;
   // balance_t pending = amount > 0? 0 : -amount;
   balance_t pending = -amount;
   fill_balance_history(history, len, now, this->balance, pending);
   // print_h(this->id, history, *len);
-  // printf("DEBUG %i: send ACK that I received amount=%i from=%i\n", this->id,
-  // order->s_amount, order->s_src);
+  // printf("DEBUG %i: send ACK that I received amount=%i from=%i\n", this->id, order->s_amount, order->s_src);
 }
 
 int run_child_rutine(Process *this) {
@@ -142,7 +134,7 @@ int run_child_rutine(Process *this) {
          this->parent_pid, this->balance);
 
   Message msg;
-  create_message(&msg, STARTED, NULL, 0);
+  create_message(&msg, STARTED, &msg, 0);
 
   if (lamport_send_multicast(this, &msg) != 0) {
     printf("Fail to do multicast STARTED request from process %i\n", this->id);
@@ -188,7 +180,7 @@ int run_child_rutine(Process *this) {
         logger(this->log->processes, log_transfer_in_fmt, this->id,
                order->s_amount, order->s_src);
         Message ack;
-        create_message(&ack, ACK, NULL, 0);
+        create_message(&ack, ACK, &msg, 0);
         lamport_send(this, 0, &ack);
       } else {
         printf("Alien message receive: src %d, dst %d, in clid %d\n",
@@ -204,7 +196,7 @@ int run_child_rutine(Process *this) {
 
   logger(this->log->processes, log_done_fmt, this->id, this->balance);
 
-  create_message(&msg, DONE, NULL, 0);
+  create_message(&msg, DONE, &msg, 0);
 
   if (lamport_send_multicast(this, &msg) != 0) {
     printf("Fail to do multicast DONE request from process %i in clid %d\n",
@@ -222,10 +214,9 @@ int run_child_rutine(Process *this) {
         printf("Too late to transfer message to src child %d\n", this->id);
       } else if (order->s_dst == this->id) {
         change_balance(this, history, &history_len, order->s_amount);
-        logger(this->log->processes, log_transfer_in_fmt, this->id,
-               order->s_amount, order->s_src);
+        logger(this->log->processes, log_transfer_in_fmt, this->id, order->s_amount, order->s_src);
         Message ack;
-        create_message(&ack, ACK, NULL, 0);
+        create_message(&ack, ACK, &msg, 0);
         lamport_send(this, 0, &ack);
       } else {
         printf("Alien message receive: src %d, dst %d, in clid %d\n",
@@ -242,8 +233,7 @@ int run_child_rutine(Process *this) {
   }
 
   logger(this->log->processes, log_received_all_done_fmt, this->id);
-  fill_balance_history(history, &history_len, get_lamport_time(), this->balance,
-                       0);
+  fill_balance_history(history, &history_len, get_lamport_time(), this->balance, 0);
   history_len++;
   size_t s_history_len = sizeof(BalanceState) * history_len;
   BalanceHistory b_history;
@@ -255,12 +245,13 @@ int run_child_rutine(Process *this) {
                  sizeof(local_id) + sizeof(uint8_t) + s_history_len);
   lamport_send(this, 0, &his_msg);
 
-  // printf("DEBUG %i: sent HISTORY to parent\n", this->id);
 
   if (close_used_pipes(this) != 0) {
     printf("Fail to close used pipes %i\n", this->id);
     return 1;
   }
+  printf("DEBUG %i: CLEAR PIPES!\n", this->id);
+  
 
   fclose(this->log->pipes);
   fclose(this->log->processes);
@@ -283,7 +274,7 @@ int run_parent_rutine(Process *this) {
 
   // ------------ lamport_send for all STOP message -------------
   Message msg;
-  create_message(&msg, STOP, NULL, 0);
+  create_message(&msg, STOP, &msg, 0);
 
   if (lamport_send_multicast(this, &msg) != 0) {
     printf("Fail to do multicast STOP request from process parent %i\n",
@@ -298,7 +289,7 @@ int run_parent_rutine(Process *this) {
     logger(this->log->processes, log_received_all_done_fmt, this->id);
   //------------ collect BALANCE_HISTORY ---------------
 
-  AllHistory *all_history = (AllHistory *)malloc(sizeof(AllHistory));
+  AllHistory *all_history = (AllHistory*)malloc(sizeof(AllHistory));
   if (wait_for_history(this, all_history) != 0) {
     printf("Fail to receive BALANCE_HISTORY from all clients %i\n", this->id);
     return 1;
@@ -341,8 +332,7 @@ void transfer(void *parent_data, local_id src, local_id dst, balance_t amount) {
   order.s_dst = dst;
   order.s_amount = amount;
   create_message(&msg, TRANSFER, &order, sizeof(TransferOrder));
-  // printf("DEBUG %i: sent TRANSFER from %i to %i amount=%i \n", this->id, src,
-  // dst, amount);
+  // printf("DEBUG %i: sent TRANSFER from %i to %i amount=%i \n", this->id, src, dst, amount);
   lamport_send(this, src, &msg);
 
   // ----------- listen for ASK -----------------------
@@ -394,15 +384,18 @@ int main(int argc, const char *argv[]) {
 
   if (init_pipes(this))
     return -1;
+  fflush(this->log->pipes);
 
   pid_t my_parent_pid = this->pid;
   for (int i = 1; i < this->num_of_processes; i++) {
+    // int pid = fork();
     if (fork() == 0) {
       this->parent_id = 0;
       this->parent_pid = my_parent_pid;
       this->pid = getpid();
       this->id = i;
       this->balance = balances[i - 1];
+
       break;
     }
   }

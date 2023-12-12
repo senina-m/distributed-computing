@@ -157,11 +157,12 @@ int main (int argc, const char * argv[]){
     this->pid = getpid();
     this->num_of_processes = total_N;
     this->log = mmalloc(Log);
-    this->log->processes = fopen(events_log, "a");
+    this->log->processes = fopen(events_log, "w");
     this->log->pipes = fopen(pipes_log, "w");
     this->pipes = alloc_pipes(total_N);
 
     if(init_pipes(this)) return -1;
+    fflush(this->log->pipes);
 
     pid_t my_parent_pid = this->pid;
     for(int i = 1; i < this->num_of_processes; i++){
@@ -170,13 +171,12 @@ int main (int argc, const char * argv[]){
             this->parent_pid = my_parent_pid;
             this->pid = getpid();
             this->id = i;
-            break;
+            if(close_unused_pipes(this)) return -1;
+            run_child_rutine(this);
+            exit(0);
         }
     }
 
     if(close_unused_pipes(this)) return -1;
-
-    if(this->parent_id == 0){
-        run_child_rutine(this);
-    }else  if(run_parent_rutine(this)) return -1;
+    if(run_parent_rutine(this)) return -1;
 }

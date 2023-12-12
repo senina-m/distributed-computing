@@ -13,12 +13,17 @@ Pipe*** alloc_pipes(int n){
     return pipes;
 }
 
-void free_pipes(Pipe*** ptr, int n){
+void free_pipes(Pipe*** pipes, int n){
     for (int i = 0; i < n; i++){
-        free(ptr[i]);
+        for(int j = 0; j < n; j++){
+            free(pipes[i][j]);
+        }
+        free(pipes[i]);
     }
-    free(ptr);
+    free(pipes);
 }
+
+int count = 0;
 
 int init_pipes(Process* this){
     // printf("INITING PIPES\n");
@@ -41,6 +46,8 @@ int init_pipes(Process* this){
             }
         }
     }
+
+    printf("DEBUG %i COUNT %i\n", this->id, ++count);
     return 0;
 }
 
@@ -66,7 +73,7 @@ int close_used_pipes(Process* this){
         for (int j = 0; j < this->num_of_processes; j++) {
             if (i == this->id && i != j) {
                 if((close(this->pipes[i][j]->fr) == 0) && (close(this->pipes[j][i]->fw) == 0)){
-                    // fprintf(this->log->pipes, "Process %i closed used pipes r:%i %i and w:%i %i\n", this->id, i, j, j, i);
+                    fprintf(this->log->pipes, "Process %i closed used pipes r:%i %i and w:%i %i\n", this->id, i, j, j, i);
                 }else{
                     fprintf(this->log->pipes, "Process %i CAN'T close used pipes r:%i %i and w:%i %i\n", this->id, i, j, j, i);
                     return 1;

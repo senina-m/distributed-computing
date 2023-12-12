@@ -20,7 +20,7 @@ typedef struct {
 void print_queue(local_id id);
 void pop_queue();
 void add_queue(Node *node);
-void manage_request(Process* this, Message* msg);
+int manage_CS(Process* this);
 int wait_cs(Process* this);
 
 #endif
