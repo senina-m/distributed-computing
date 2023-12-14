@@ -2,6 +2,7 @@
 #include "processes.h"
 #include "lamport.h"
 #include <errno.h>
+#include "queue.h"
 
 int send(void *self, local_id dst, const Message *msg) {
   Process *this = (Process *)self;
@@ -29,6 +30,15 @@ int send_multicast(void *self, const Message *msg) {
     }
   }
   return 0;
+}
+
+void add_node(Message* msg, local_id from){
+    Node node;
+    node.id = from;
+    node.time = msg->s_header.s_local_time;
+    memcpy(msg->s_payload, &node, sizeof(Node));
+    msg->s_header.s_payload_len = sizeof(Node);
+    // printf("DEBUG  sender %i: message was received with time %i\n", node.id, node.time);
 }
 
 int receive(void *self, local_id from, Message *msg) {
@@ -60,6 +70,10 @@ int receive(void *self, local_id from, Message *msg) {
                bytes_to_read);
       if (read_count == bytes_to_read) {
         msg->s_payload[msg->s_header.s_payload_len] = 0;
+
+        if(msg->s_header.s_payload_len == 0){
+          add_node(msg, from);
+        }
         return 0;
       } else if (read_count > 0) {
         bytes_to_read -= read_count;
@@ -123,6 +137,9 @@ int receive_any(void *self, Message *msg) {
                bytes_to_read);
       if (read_count == bytes_to_read) {
         msg->s_payload[msg->s_header.s_payload_len] = 0;
+        if(msg->s_header.s_payload_len == 0){
+            add_node(msg, from);
+        }
         return 0;
       } else if (read_count > 0) {
         bytes_to_read -= read_count;

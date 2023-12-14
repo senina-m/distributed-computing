@@ -86,7 +86,7 @@ int run_child_rutine(Process *this) {
 			request_cs(this);
 		}
 		
-    // printf("DEBUG %i: In CS\n", this->id);
+    printf("DEBUG %i: In CS\n", this->id);
 
     char buffer[MAX_PAYLOAD_LEN];
 		snprintf(buffer, MAX_PAYLOAD_LEN, log_loop_operation_fmt, this->id, i, this->id * iterations);
@@ -98,7 +98,7 @@ int run_child_rutine(Process *this) {
 			release_cs(this);
 		}
 
-    // printf("DEBUG %i: Out of CS\n", this->id);
+    printf("DEBUG %i: Out of CS\n", this->id);
 	}
 
   logger(this->log->processes, log_done_fmt, get_lamport_time(), this->id, 0);
@@ -178,7 +178,7 @@ int main(int argc, const char *argv[]) {
 
     if (strcmp(argv[i], "-p") == 0 && i != argc - 1) {
       total_N = atoi(argv[i + 1]) + 1;
-      if (total_N > 10 || total_N < 1) {
+      if (total_N > MAX_PROCESS_ID + 1 || total_N < 1) {
         printf("Num of processes has to be from 1 to 10\n");
         return -1;
       }

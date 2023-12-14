@@ -8,8 +8,8 @@
 #include "lamport.h"
 
 typedef struct {
-  timestamp_t time;
   local_id id;
+  timestamp_t time;
 } Node;
 
 typedef struct {

@@ -44,18 +44,6 @@ void add_queue(Node *node) {
 
 }
 
-void manage_request(Process *this, Message *msg) {
-  Node node;
-  memcpy(&node, msg->s_payload, msg->s_header.s_payload_len);
-  // printf("DEBUG %i: got CS_REQUEST (%i %i)\n", this->id, node.id, node.time);
-  add_queue(&node);
-  // print_queue(this->id);
-  Message send_msg;
-  create_message(&send_msg, CS_REPLY, &msg, 0);
-  lamport_send(this, node.id, &send_msg);
-  // printf("DEBUG %i: send CS_REPLY (%i %i)\n", this->id, node.id, node.time);
-}
-
 void queue_drop_by_id(local_id proc_id){
   bool found = false;
   for (int i = 0; i < queue.len - 1; i++) {
@@ -66,24 +54,35 @@ void queue_drop_by_id(local_id proc_id){
   queue.len = queue.len - 1;
 }
 
+void get_node_from_msg(Message* msg, Node* node){
+  memcpy(node, msg->s_payload, sizeof(Node));
+}
+
 int manage_CS(Process* this){
   Message msg;
+  Node node;
   if (lamport_receive_any(this, &msg) == 0) {
+      get_node_from_msg(&msg, &node);
       // При получении запроса от другого потока, запрос добавляется в очередь и запрашивающему потоку посылается ответ
       if (msg.s_header.s_type == CS_REQUEST) {
-          manage_request(this, &msg);
+          printf("DEBUG %i: got CS_REQUEST (%i %i)\n", this->id, node.id, node.time);
+          add_queue(&node);
+          print_queue(this->id);
+          Message send_msg;
+          create_message(&send_msg, CS_REPLY, &msg, 0);
+          lamport_send(this, node.id, &send_msg);
+          printf("DEBUG %i: send CS_REPLY (%i %i)\n", this->id, node.id, node.time);
       } else if (msg.s_header.s_type == CS_REPLY) {
-          // printf("DEBUG %i: got CS_REPLY\n", this->id);
+          printf("DEBUG %i: got CS_REPLY from %i\n", this->id, node.id);
           return 1;
       // При получении release от другого потока, его запрос удаляется из очереди
       } else if (msg.s_header.s_type == CS_RELEASE){
-          local_id proc_id = *msg.s_payload;
-          // printf("DEBUG %i: got CS_RELEASE from %i\n", this->id, proc_id);
-          queue_drop_by_id(proc_id);
-          // print_queue(this->id);
+          printf("DEBUG %i: got CS_RELEASE from %i\n", this->id, node.id);
+          queue_drop_by_id(node.id);
+          print_queue(this->id);
       } else if (msg.s_header.s_type == DONE){
         this->done++;
-        // printf("DEBUG %i: got DONE %i\n", this->id, this->done);
+        printf("DEBUG %i: got DONE %i\n", this->id, this->done);
       }
   }
   return 0;
