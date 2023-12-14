@@ -1,6 +1,0 @@
-version: '2'
-
-services:
-  pa4:
-    build: .
-    command: '-p 5 10 20 30 40 50'

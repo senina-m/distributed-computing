@@ -38,7 +38,7 @@ void add_node(Message* msg, local_id from){
     node.time = msg->s_header.s_local_time;
     memcpy(msg->s_payload, &node, sizeof(Node));
     msg->s_header.s_payload_len = sizeof(Node);
-    // printf("DEBUG  sender %i: message was received with time %i\n", node.id, node.time);
+    // // printf("DEBUG  sender %i: message was received with time %i\n", node.id, node.time);
 }
 
 int receive(void *self, local_id from, Message *msg) {

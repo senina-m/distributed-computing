@@ -5,7 +5,7 @@ timestamp_t now_time = 0;
 
 // void print_msg(Process* this, Message* msg){
 //     if (msg->s_header.s_payload_len > 0)
-//     printf("DEBUG %i: Header: len=%i, time=%i content=%s\n", 
+//     // printf("DEBUG %i: Header: len=%i, time=%i content=%s\n", 
 //     this->id, msg->s_header.s_payload_len, msg->s_header.s_local_time, msg->s_payload);
 // }
 

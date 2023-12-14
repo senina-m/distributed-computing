@@ -26,21 +26,6 @@ void free_process(Process *ptr) {
   free(ptr);
 }
 
-int wait_for_all(Process *this, MessageType t) {
-  Message msg;
-  int amount = 0;
-  int n = this->num_of_processes - ((this->id == 0) ? 1 : 2);
-  while (amount < n) {
-    if (lamport_receive_any(this, &msg) == 0) {
-      if (msg.s_header.s_type == (int16_t)t)
-        amount++;
-    } else {
-      printf("Fail to recive message in process %i (wait_for_all)\n", this->id);
-    }
-  }
-  return 0;
-}
-
 int blocked_wait_for_all(Process *this, MessageType t) {
   Message msg;
   int n = this->num_of_processes;
@@ -86,7 +71,7 @@ int run_child_rutine(Process *this) {
 			request_cs(this);
 		}
 		
-    printf("DEBUG %i: In CS\n", this->id);
+    // printf("DEBUG %i: In CS\n", this->id);
 
     char buffer[MAX_PAYLOAD_LEN];
 		snprintf(buffer, MAX_PAYLOAD_LEN, log_loop_operation_fmt, this->id, i, this->id * iterations);
@@ -98,7 +83,7 @@ int run_child_rutine(Process *this) {
 			release_cs(this);
 		}
 
-    printf("DEBUG %i: Out of CS\n", this->id);
+    // printf("DEBUG %i: Out of CS\n", this->id);
 	}
 
   logger(this->log->processes, log_done_fmt, get_lamport_time(), this->id, 0);
@@ -131,14 +116,14 @@ int run_child_rutine(Process *this) {
 int run_parent_rutine(Process *this) {
 
   // ------------ wait for all STARTED ------------------
-  if (wait_for_all(this, STARTED) != 0) {
+  if (blocked_wait_for_all(this, STARTED) != 0) {
     printf("Fail to receive all STARTED messages in parent %i\n", this->id);
     return 1;
   } else
     logger(this->log->processes, log_received_all_started_fmt, get_lamport_time(), this->id);
 
   // ----------- wait for DONE messages from all -------
-  if (wait_for_all(this, DONE) != 0) {
+  if (blocked_wait_for_all(this, DONE) != 0) {
     printf("Fail to lamport_receive all DONE messages %i\n", this->id);
     return 1;
   } else
